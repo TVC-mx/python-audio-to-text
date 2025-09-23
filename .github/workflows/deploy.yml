@@ -29,13 +29,13 @@ jobs:
       run: |
         echo "🔍 Obteniendo información completa de VM y recursos..."
         
-        # Buscar VM que coincida con el patrón tvc-audio2text-*-kv en toda la suscripción
+        # Buscar VM que coincida con el patrón tvc-audio2text-*-vm-* en toda la suscripción
         VM_INFO=$(az vm list \
-          --query "[?contains(name, 'tvc-audio2text') && contains(name, 'kv')]" \
+          --query "[?contains(name, 'tvc-audio2text') && contains(name, 'vm')]" \
           --output json | jq '.[0]')
         
         if [ "$VM_INFO" = "null" ] || [ -z "$VM_INFO" ]; then
-          echo "❌ No se encontró VM con patrón tvc-audio2text-*-kv"
+          echo "❌ No se encontró VM con patrón tvc-audio2text-*-vm-*"
           exit 1
         fi
         
