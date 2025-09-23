@@ -23,10 +23,10 @@ Este directorio contiene los workflows de GitHub Actions para automatizar el des
 ### **2. `deploy.yml` - Despliegue Automático**
 - **Trigger**: 
   - Push a `main`
-  - Pull requests a `main`
   - Manual (`workflow_dispatch`)
-- **Propósito**: Desplegar cambios automáticamente a la VM
+- **Propósito**: Desplegar cambios automáticamente a la VM usando Key Vault
 - **Funciones**:
+  - Obtener clave SSH desde Azure Key Vault
   - Detener contenedores existentes
   - Actualizar código desde GitHub
   - Reconstruir y ejecutar con GPU

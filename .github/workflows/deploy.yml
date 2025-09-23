@@ -3,8 +3,6 @@ name: Deploy to Azure VM
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -26,12 +24,29 @@ jobs:
             "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
           }
     
+    - name: Get SSH Key from Key Vault
+      id: get-ssh-key
+      run: |
+        echo "🔑 Obteniendo clave SSH desde Key Vault..."
+        
+        # Obtener clave privada desde Key Vault
+        SSH_PRIVATE_KEY=$(az keyvault secret show \
+          --vault-name ${{ secrets.KEY_VAULT_NAME }} \
+          --name ${{ secrets.SSH_KEY_SECRET_NAME }} \
+          --query value \
+          --output tsv)
+        
+        # Guardar en variable de salida
+        echo "ssh-private-key=$SSH_PRIVATE_KEY" >> $GITHUB_OUTPUT
+        
+        echo "✅ Clave SSH obtenida desde Key Vault"
+    
     - name: Get VM IP
       id: get-vm-ip
       run: |
         VM_IP=$(az vm show \
-          --resource-group python-audio-to-text-rg \
-          --name audio-transcription-vm \
+          --resource-group ${{ secrets.RESOURCE_GROUP_NAME }} \
+          --name ${{ secrets.VM_NAME }} \
           --show-details \
           --query publicIps \
           --output tsv)
@@ -41,16 +56,11 @@ jobs:
     - name: Setup SSH
       uses: webfactory/ssh-agent@v0.7.0
       with:
-        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+        ssh-private-key: ${{ steps.get-ssh-key.outputs.ssh-private-key }}
     
     - name: Deploy to VM
       run: |
-        # Crear directorio temporal para archivos
-        mkdir -p /tmp/deploy
-        
-        # Copiar archivos necesarios
-        cp -r . /tmp/deploy/
-        cd /tmp/deploy
+        echo "🚀 Desplegando a VM usando clave de Terraform/Key Vault..."
         
         # Crear script de deploy
         cat > deploy.sh << 'EOF'
@@ -101,7 +111,7 @@ jobs:
         chmod +x deploy.sh
         
         # Ejecutar deploy en la VM
-        scp -o StrictHostKeyChecking=no -r /tmp/deploy/* azureuser@${{ steps.get-vm-ip.outputs.vm-ip }}:/home/azureuser/
+        scp -o StrictHostKeyChecking=no deploy.sh azureuser@${{ steps.get-vm-ip.outputs.vm-ip }}:/home/azureuser/
         ssh -o StrictHostKeyChecking=no azureuser@${{ steps.get-vm-ip.outputs.vm-ip }} "cd /home/azureuser && ./deploy.sh"
     
     - name: Verify deployment
@@ -117,12 +127,3 @@ jobs:
           echo '💾 Uso de memoria:'
           free -h
         "
-    
-    - name: Notify deployment status
-      if: always()
-      run: |
-        if [ "${{ job.status }}" == "success" ]; then
-          echo "✅ Deploy exitoso!"
-        else
-          echo "❌ Deploy falló!"
-        fi
