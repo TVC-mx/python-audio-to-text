@@ -27,48 +27,43 @@ jobs:
     - name: Get VM and Key Vault Info
       id: get-vm-info
       run: |
-        echo "🔍 Obteniendo información de VM y Key Vault..."
+        echo "🔍 Obteniendo información completa de VM y recursos..."
         
-        # Buscar VM que coincida con el patrón tvc-audio2text-*-kv
-        VM_NAME=$(az vm list \
-          --resource-group ${{ secrets.RESOURCE_GROUP_NAME }} \
-          --query "[?contains(name, 'tvc-audio2text') && contains(name, 'kv')].name" \
-          --output tsv | head -1)
+        # Buscar VM que coincida con el patrón tvc-audio2text-*-kv en toda la suscripción
+        VM_INFO=$(az vm list \
+          --query "[?contains(name, 'tvc-audio2text') && contains(name, 'kv')]" \
+          --output json | jq '.[0]')
         
-        if [ -z "$VM_NAME" ]; then
+        if [ "$VM_INFO" = "null" ] || [ -z "$VM_INFO" ]; then
           echo "❌ No se encontró VM con patrón tvc-audio2text-*-kv"
           exit 1
         fi
         
+        # Extraer información de la VM
+        VM_NAME=$(echo "$VM_INFO" | jq -r '.name')
+        RESOURCE_GROUP=$(echo "$VM_INFO" | jq -r '.resourceGroup')
+        LOCATION=$(echo "$VM_INFO" | jq -r '.location')
+        
         echo "🔍 VM encontrada: $VM_NAME"
+        echo "📦 Grupo de recursos: $RESOURCE_GROUP"
+        echo "📍 Ubicación: $LOCATION"
         
         # Obtener IP de la VM
         VM_IP=$(az vm show \
-          --resource-group ${{ secrets.RESOURCE_GROUP_NAME }} \
+          --resource-group "$RESOURCE_GROUP" \
           --name "$VM_NAME" \
           --show-details \
           --query publicIps \
           --output tsv)
         
-        # Obtener información de la VM para extraer Key Vault
-        VM_INFO=$(az vm show \
-          --resource-group ${{ secrets.RESOURCE_GROUP_NAME }} \
-          --name "$VM_NAME" \
-          --query "{name:name, resourceGroup:resourceGroup, location:location}" \
-          --output json)
-        
-        # Extraer nombre del Key Vault del nombre del grupo de recursos
-        # Asumiendo que el Key Vault tiene el mismo nombre que el grupo de recursos
-        KEY_VAULT_NAME="${{ secrets.RESOURCE_GROUP_NAME }}"
-        
-        # Alternativamente, buscar Key Vault en el mismo grupo de recursos
+        # Buscar Key Vault en el mismo grupo de recursos
         KEY_VAULT_NAME=$(az keyvault list \
-          --resource-group ${{ secrets.RESOURCE_GROUP_NAME }} \
+          --resource-group "$RESOURCE_GROUP" \
           --query "[0].name" \
           --output tsv)
         
         if [ -z "$KEY_VAULT_NAME" ]; then
-          echo "❌ No se encontró Key Vault en el grupo de recursos"
+          echo "❌ No se encontró Key Vault en el grupo de recursos: $RESOURCE_GROUP"
           exit 1
         fi
         
@@ -77,6 +72,8 @@ jobs:
         # Guardar variables de salida
         echo "vm-ip=$VM_IP" >> $GITHUB_OUTPUT
         echo "vm-name=$VM_NAME" >> $GITHUB_OUTPUT
+        echo "resource-group=$RESOURCE_GROUP" >> $GITHUB_OUTPUT
+        echo "location=$LOCATION" >> $GITHUB_OUTPUT
         echo "key-vault-name=$KEY_VAULT_NAME" >> $GITHUB_OUTPUT
         echo "VM IP: $VM_IP"
         echo "Key Vault: $KEY_VAULT_NAME"
@@ -86,7 +83,7 @@ jobs:
       run: |
         echo "🔑 Obteniendo clave SSH desde Key Vault..."
         
-        # Obtener clave privada desde Key Vault usando el nombre detectado
+        # Obtener clave privada desde Key Vault usando la información detectada
         SSH_PRIVATE_KEY=$(az keyvault secret show \
           --vault-name ${{ steps.get-vm-info.outputs.key-vault-name }} \
           --name ${{ secrets.SSH_KEY_SECRET_NAME }} \

@@ -37,17 +37,18 @@ Configura estos secrets en tu repositorio GitHub:
 
 ### **Key Vault Configuration:**
 - `SSH_KEY_SECRET_NAME`: Nombre del secret que contiene la clave SSH
-- `RESOURCE_GROUP_NAME`: Nombre del grupo de recursos
 
 **Nota**: El workflow detecta automáticamente:
-- VMs que coincidan con el patrón `tvc-audio2text-*-kv`
+- VMs que coincidan con el patrón `tvc-audio2text-*-kv` en toda la suscripción
+- Grupo de recursos de la VM encontrada
 - Key Vault en el mismo grupo de recursos
+- IP, ubicación y otros metadatos de la VM
 
 ## 🚀 **Flujo de Trabajo**
 
 ### **Paso 1: Configuración Inicial**
-1. Configurar secrets en GitHub
-2. Crear VM manualmente en Azure
+1. Configurar secrets en GitHub (solo 5 secrets)
+2. Crear VM manualmente en Azure con patrón `tvc-audio2text-*-kv`
 3. Configurar variables de entorno en la VM
 
 ### **Paso 2: Desarrollo y Deploy**
