@@ -82,11 +82,32 @@ jobs:
       id: get-ssh-key
       run: |
         echo "🔑 Obteniendo clave SSH desde Key Vault..."
+        echo "🔍 Key Vault: ${{ steps.get-vm-info.outputs.key-vault-name }}"
         
-        # Obtener clave privada desde Key Vault usando la información detectada
+        # El workflow detecta automáticamente la SSH key con patrón tvc-audio2text-*-ssh-key-*
+        
+        # Buscar SSH key con patrón tvc-audio2text-*-ssh-key-*
+        SSH_KEY_NAME=$(az keyvault secret list \
+          --vault-name ${{ steps.get-vm-info.outputs.key-vault-name }} \
+          --query "[?contains(name, 'tvc-audio2text') && contains(name, 'ssh-key')].name" \
+          --output tsv | head -1)
+        
+        if [ -z "$SSH_KEY_NAME" ]; then
+          echo "❌ No se encontró SSH key con patrón tvc-audio2text-*-ssh-key-*"
+          echo "📋 Secrets disponibles en Key Vault:"
+          az keyvault secret list \
+            --vault-name ${{ steps.get-vm-info.outputs.key-vault-name }} \
+            --query "[].name" \
+            --output table || echo "No se pudieron listar secrets"
+          exit 1
+        fi
+        
+        echo "🔑 SSH Key encontrada: $SSH_KEY_NAME"
+        
+        # Obtener clave privada desde Key Vault usando la SSH key detectada
         SSH_PRIVATE_KEY=$(az keyvault secret show \
           --vault-name ${{ steps.get-vm-info.outputs.key-vault-name }} \
-          --name ${{ secrets.SSH_KEY_SECRET_NAME }} \
+          --name "$SSH_KEY_NAME" \
           --query value \
           --output tsv)
         

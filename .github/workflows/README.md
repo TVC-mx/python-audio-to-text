@@ -35,19 +35,17 @@ Configura estos secrets en tu repositorio GitHub:
 - `AZURE_TENANT_ID`: ID del tenant de Azure
 - `AZURE_SUBSCRIPTION_ID`: ID de la suscripción de Azure
 
-### **Key Vault Configuration:**
-- `SSH_KEY_SECRET_NAME`: Nombre del secret que contiene la clave SSH
-
 **Nota**: El workflow detecta automáticamente:
 - VMs que coincidan con el patrón `tvc-audio2text-*-vm-*` en toda la suscripción
 - Grupo de recursos de la VM encontrada
 - Key Vault en el mismo grupo de recursos
+- SSH Keys con patrón `tvc-audio2text-*-ssh-key-*`
 - IP, ubicación y otros metadatos de la VM
 
 ## 🚀 **Flujo de Trabajo**
 
 ### **Paso 1: Configuración Inicial**
-1. Configurar secrets en GitHub (solo 5 secrets)
+1. Configurar secrets en GitHub (solo 4 secrets)
 2. Crear VM manualmente en Azure con patrón `tvc-audio2text-*-vm-*`
 3. Configurar variables de entorno en la VM
 
