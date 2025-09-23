@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  audio-to-text:
+    build: .
+    container_name: audio-to-text-processor
+    volumes:
+      # Montar directorios para persistir datos
+      - ./audios:/app/audios
+      - ./textos:/app/textos
+      - ./logs:/app/logs
+      # Montar archivo de configuración si existe
+      - ./.env:/app/.env:ro
+    environment:
+      # Variables de entorno para MySQL
+      - MYSQL_HOST=${MYSQL_HOST:-localhost}
+      - MYSQL_PORT=${MYSQL_PORT:-3306}
+      - MYSQL_USER=${MYSQL_USER:-root}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-llamadas}
+      
+      # Variables para URLs de audio
+      - AUDIO_BASE_URL=${AUDIO_BASE_URL:-}
+      
+      # Configuración de Whisper
+      - WHISPER_MODEL=${WHISPER_MODEL:-base}
+      
+      # Configuración de procesamiento
+      - MAX_CONCURRENT_DOWNLOADS=${MAX_CONCURRENT_DOWNLOADS:-3}
+      - MAX_CONCURRENT_TRANSCRIPTIONS=${MAX_CONCURRENT_TRANSCRIPTIONS:-2}
+    
+    # Comando por defecto (se puede sobrescribir)
+    command: python main.py --start-date 2024-01-01 --end-date 2024-01-31
+    
+    # Configuración de red (si MySQL está en otro contenedor)
+    networks:
+      - audio-network
+    
+    # Configuración de memoria compartida para modelo 'large'
+    shm_size: 4gb
+    
+    # Configuración de recursos para modelo 'large'
+    deploy:
+      resources:
+        limits:
+          memory: 24G
+          cpus: '14.0'
+        reservations:
+          memory: 12G
+          cpus: '4.0'
+
+networks:
+  audio-network:
+    driver: bridge
