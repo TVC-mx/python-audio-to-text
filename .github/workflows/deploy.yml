@@ -44,13 +44,27 @@ jobs:
     - name: Get VM IP
       id: get-vm-ip
       run: |
+        # Buscar VM que coincida con el patrón tvc-audio2text-*-kv
+        VM_NAME=$(az vm list \
+          --resource-group ${{ secrets.RESOURCE_GROUP_NAME }} \
+          --query "[?contains(name, 'tvc-audio2text') && contains(name, 'kv')].name" \
+          --output tsv | head -1)
+        
+        if [ -z "$VM_NAME" ]; then
+          echo "❌ No se encontró VM con patrón tvc-audio2text-*-kv"
+          exit 1
+        fi
+        
+        echo "🔍 VM encontrada: $VM_NAME"
+        
         VM_IP=$(az vm show \
           --resource-group ${{ secrets.RESOURCE_GROUP_NAME }} \
-          --name ${{ secrets.VM_NAME }} \
+          --name "$VM_NAME" \
           --show-details \
           --query publicIps \
           --output tsv)
         echo "vm-ip=$VM_IP" >> $GITHUB_OUTPUT
+        echo "vm-name=$VM_NAME" >> $GITHUB_OUTPUT
         echo "VM IP: $VM_IP"
     
     - name: Setup SSH
@@ -111,6 +125,7 @@ jobs:
         chmod +x deploy.sh
         
         # Ejecutar deploy en la VM
+        echo "🚀 Desplegando a VM: ${{ steps.get-vm-ip.outputs.vm-name }}"
         scp -o StrictHostKeyChecking=no deploy.sh azureuser@${{ steps.get-vm-ip.outputs.vm-ip }}:/home/azureuser/
         ssh -o StrictHostKeyChecking=no azureuser@${{ steps.get-vm-ip.outputs.vm-ip }} "cd /home/azureuser && ./deploy.sh"
     

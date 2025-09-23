@@ -39,7 +39,8 @@ Configura estos secrets en tu repositorio GitHub:
 - `KEY_VAULT_NAME`: Nombre de tu Azure Key Vault
 - `SSH_KEY_SECRET_NAME`: Nombre del secret que contiene la clave SSH
 - `RESOURCE_GROUP_NAME`: Nombre del grupo de recursos
-- `VM_NAME`: Nombre de la VM
+
+**Nota**: El workflow busca automáticamente VMs que coincidan con el patrón `tvc-audio2text-*-kv`
 
 ## 🚀 **Flujo de Trabajo**
 
