@@ -1,0 +1,87 @@
+name: Cleanup Azure Resources
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Acción a realizar'
+        required: true
+        default: 'stop'
+        type: choice
+        options:
+        - stop
+        - start
+        - restart
+        - delete
+      resource_group:
+        description: 'Grupo de recursos'
+        required: true
+        default: 'python-audio-to-text-rg'
+      vm_name:
+        description: 'Nombre de la VM'
+        required: true
+        default: 'audio-transcription-vm'
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: |
+          {
+            "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+            "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+            "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+            "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+          }
+    
+    - name: Stop VM
+      if: github.event.inputs.action == 'stop'
+      run: |
+        echo "🛑 Deteniendo VM..."
+        az vm deallocate \
+          --resource-group ${{ github.event.inputs.resource_group }} \
+          --name ${{ github.event.inputs.vm_name }}
+        echo "✅ VM detenida"
+    
+    - name: Start VM
+      if: github.event.inputs.action == 'start'
+      run: |
+        echo "▶️ Iniciando VM..."
+        az vm start \
+          --resource-group ${{ github.event.inputs.resource_group }} \
+          --name ${{ github.event.inputs.vm_name }}
+        echo "✅ VM iniciada"
+    
+    - name: Restart VM
+      if: github.event.inputs.action == 'restart'
+      run: |
+        echo "🔄 Reiniciando VM..."
+        az vm restart \
+          --resource-group ${{ github.event.inputs.resource_group }} \
+          --name ${{ github.event.inputs.vm_name }}
+        echo "✅ VM reiniciada"
+    
+    - name: Delete VM
+      if: github.event.inputs.action == 'delete'
+      run: |
+        echo "🗑️ Eliminando VM..."
+        az vm delete \
+          --resource-group ${{ github.event.inputs.resource_group }} \
+          --name ${{ github.event.inputs.vm_name }} \
+          --yes
+        echo "✅ VM eliminada"
+    
+    - name: Get VM status
+      if: github.event.inputs.action != 'delete'
+      run: |
+        echo "📊 Estado de la VM:"
+        az vm show \
+          --resource-group ${{ github.event.inputs.resource_group }} \
+          --name ${{ github.event.inputs.vm_name }} \
+          --show-details \
+          --query "{name:name, powerState:powerState, publicIps:publicIps}" \
+          --output table

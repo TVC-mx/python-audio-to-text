@@ -1,0 +1,195 @@
+name: Setup Azure VM
+
+on:
+  workflow_dispatch:
+    inputs:
+      vm_name:
+        description: 'Nombre de la VM'
+        required: true
+        default: 'audio-transcription-vm'
+      resource_group:
+        description: 'Grupo de recursos'
+        required: true
+        default: 'python-audio-to-text-rg'
+      location:
+        description: 'Región de Azure'
+        required: true
+        default: 'eastus'
+      vm_size:
+        description: 'Tamaño de la VM'
+        required: true
+        default: 'Standard_NC6s_v3'
+
+jobs:
+  setup-vm:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        creds: |
+          {
+            "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+            "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+            "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+            "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+          }
+    
+    - name: Create Resource Group
+      run: |
+        echo "📦 Creando grupo de recursos..."
+        az group create \
+          --name ${{ github.event.inputs.resource_group }} \
+          --location ${{ github.event.inputs.location }}
+    
+    - name: Create VM
+      run: |
+        echo "🖥️ Creando VM con GPU..."
+        az vm create \
+          --resource-group ${{ github.event.inputs.resource_group }} \
+          --name ${{ github.event.inputs.vm_name }} \
+          --image Ubuntu2204 \
+          --size ${{ github.event.inputs.vm_size }} \
+          --admin-username azureuser \
+          --generate-ssh-keys \
+          --public-ip-sku Standard \
+          --storage-sku Premium_LRS \
+          --os-disk-size-gb 100
+    
+    - name: Open SSH Port
+      run: |
+        echo "🔒 Configurando reglas de seguridad..."
+        az vm open-port \
+          --resource-group ${{ github.event.inputs.resource_group }} \
+          --name ${{ github.event.inputs.vm_name }} \
+          --port 22 \
+          --priority 1000
+    
+    - name: Get VM IP
+      id: get-vm-ip
+      run: |
+        VM_IP=$(az vm show \
+          --resource-group ${{ github.event.inputs.resource_group }} \
+          --name ${{ github.event.inputs.vm_name }} \
+          --show-details \
+          --query publicIps \
+          --output tsv)
+        echo "vm-ip=$VM_IP" >> $GITHUB_OUTPUT
+        echo "VM IP: $VM_IP"
+    
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+    
+    - name: Configure VM
+      run: |
+        echo "🔧 Configurando VM..."
+        
+        # Crear script de configuración
+        cat > setup-vm.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        echo "🚀 Configurando Azure VM para transcripción de audio..."
+        
+        # Actualizar sistema
+        echo "📦 Actualizando sistema..."
+        sudo apt update && sudo apt upgrade -y
+        
+        # Instalar dependencias del sistema
+        echo "🛠️ Instalando dependencias del sistema..."
+        sudo apt install -y \
+          curl \
+          wget \
+          git \
+          unzip \
+          software-properties-common \
+          apt-transport-https \
+          ca-certificates \
+          gnupg \
+          lsb-release \
+          build-essential \
+          python3-pip \
+          python3-venv
+        
+        # Instalar Docker
+        echo "🐳 Instalando Docker..."
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        sudo apt update
+        sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+        
+        # Configurar Docker
+        echo "⚙️ Configurando Docker..."
+        sudo usermod -aG docker $USER
+        sudo systemctl enable docker
+        sudo systemctl start docker
+        
+        # Instalar NVIDIA Docker (GPU Support)
+        echo "🎮 Instalando soporte para GPU..."
+        distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+        curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
+        curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+        sudo apt update
+        sudo apt install -y nvidia-docker2
+        sudo systemctl restart docker
+        
+        # Instalar drivers NVIDIA
+        echo "🔧 Instalando drivers NVIDIA..."
+        sudo apt install -y nvidia-driver-470
+        
+        echo "✅ Configuración completada!"
+        echo "🔄 Reiniciando VM para aplicar cambios..."
+        sudo reboot
+        EOF
+        
+        chmod +x setup-vm.sh
+        
+        # Copiar y ejecutar script de configuración
+        scp -o StrictHostKeyChecking=no setup-vm.sh azureuser@${{ steps.get-vm-ip.outputs.vm-ip }}:/home/azureuser/
+        ssh -o StrictHostKeyChecking=no azureuser@${{ steps.get-vm-ip.outputs.vm-ip }} "cd /home/azureuser && ./setup-vm.sh"
+    
+    - name: Wait for VM restart
+      run: |
+        echo "⏳ Esperando que la VM se reinicie..."
+        sleep 60
+        
+        # Esperar a que la VM esté disponible
+        for i in {1..30}; do
+          if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 azureuser@${{ steps.get-vm-ip.outputs.vm-ip }} "echo 'VM disponible'"; then
+            echo "✅ VM disponible después del reinicio"
+            break
+          fi
+          echo "⏳ Esperando... ($i/30)"
+          sleep 10
+        done
+    
+    - name: Verify GPU setup
+      run: |
+        echo "🔍 Verificando configuración GPU..."
+        ssh -o StrictHostKeyChecking=no azureuser@${{ steps.get-vm-ip.outputs.vm-ip }} "
+          echo '📊 Estado del sistema:'
+          docker --version
+          echo ''
+          echo '🎮 Estado GPU:'
+          nvidia-smi || echo 'GPU no disponible aún'
+          echo ''
+          echo '💾 Uso de memoria:'
+          free -h
+        "
+    
+    - name: Output VM information
+      run: |
+        echo "🎉 VM configurada exitosamente!"
+        echo "📍 IP Pública: ${{ steps.get-vm-ip.outputs.vm-ip }}"
+        echo "🔑 Conectarse: ssh azureuser@${{ steps.get-vm-ip.outputs.vm-ip }}"
+        echo ""
+        echo "📋 Próximos pasos:"
+        echo "1. Configurar variables de entorno en la VM"
+        echo "2. Ejecutar el workflow de deploy"
+        echo "3. Monitorear el procesamiento"
