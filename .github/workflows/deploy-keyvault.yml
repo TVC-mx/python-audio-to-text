@@ -24,11 +24,26 @@ jobs:
             "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
           }
     
-    - name: Get VM and Key Vault Info
-      id: get-vm-info
+    - name: Get SSH Key from Key Vault
+      id: get-ssh-key
       run: |
-        echo "🔍 Obteniendo información de VM y Key Vault..."
+        echo "🔑 Obteniendo clave SSH desde Key Vault..."
         
+        # Obtener clave privada desde Key Vault
+        SSH_PRIVATE_KEY=$(az keyvault secret show \
+          --vault-name ${{ secrets.KEY_VAULT_NAME }} \
+          --name ${{ secrets.SSH_KEY_SECRET_NAME }} \
+          --query value \
+          --output tsv)
+        
+        # Guardar en variable de salida
+        echo "ssh-private-key=$SSH_PRIVATE_KEY" >> $GITHUB_OUTPUT
+        
+        echo "✅ Clave SSH obtenida desde Key Vault"
+    
+    - name: Get VM IP
+      id: get-vm-ip
+      run: |
         # Buscar VM que coincida con el patrón tvc-audio2text-*-kv
         VM_NAME=$(az vm list \
           --resource-group ${{ secrets.RESOURCE_GROUP_NAME }} \
@@ -42,61 +57,15 @@ jobs:
         
         echo "🔍 VM encontrada: $VM_NAME"
         
-        # Obtener IP de la VM
         VM_IP=$(az vm show \
           --resource-group ${{ secrets.RESOURCE_GROUP_NAME }} \
           --name "$VM_NAME" \
           --show-details \
           --query publicIps \
           --output tsv)
-        
-        # Obtener información de la VM para extraer Key Vault
-        VM_INFO=$(az vm show \
-          --resource-group ${{ secrets.RESOURCE_GROUP_NAME }} \
-          --name "$VM_NAME" \
-          --query "{name:name, resourceGroup:resourceGroup, location:location}" \
-          --output json)
-        
-        # Extraer nombre del Key Vault del nombre del grupo de recursos
-        # Asumiendo que el Key Vault tiene el mismo nombre que el grupo de recursos
-        KEY_VAULT_NAME="${{ secrets.RESOURCE_GROUP_NAME }}"
-        
-        # Alternativamente, buscar Key Vault en el mismo grupo de recursos
-        KEY_VAULT_NAME=$(az keyvault list \
-          --resource-group ${{ secrets.RESOURCE_GROUP_NAME }} \
-          --query "[0].name" \
-          --output tsv)
-        
-        if [ -z "$KEY_VAULT_NAME" ]; then
-          echo "❌ No se encontró Key Vault en el grupo de recursos"
-          exit 1
-        fi
-        
-        echo "🔑 Key Vault encontrado: $KEY_VAULT_NAME"
-        
-        # Guardar variables de salida
         echo "vm-ip=$VM_IP" >> $GITHUB_OUTPUT
         echo "vm-name=$VM_NAME" >> $GITHUB_OUTPUT
-        echo "key-vault-name=$KEY_VAULT_NAME" >> $GITHUB_OUTPUT
         echo "VM IP: $VM_IP"
-        echo "Key Vault: $KEY_VAULT_NAME"
-    
-    - name: Get SSH Key from Key Vault
-      id: get-ssh-key
-      run: |
-        echo "🔑 Obteniendo clave SSH desde Key Vault..."
-        
-        # Obtener clave privada desde Key Vault usando el nombre detectado
-        SSH_PRIVATE_KEY=$(az keyvault secret show \
-          --vault-name ${{ steps.get-vm-info.outputs.key-vault-name }} \
-          --name ${{ secrets.SSH_KEY_SECRET_NAME }} \
-          --query value \
-          --output tsv)
-        
-        # Guardar en variable de salida
-        echo "ssh-private-key=$SSH_PRIVATE_KEY" >> $GITHUB_OUTPUT
-        
-        echo "✅ Clave SSH obtenida desde Key Vault: ${{ steps.get-vm-info.outputs.key-vault-name }}"
     
     - name: Setup SSH
       uses: webfactory/ssh-agent@v0.7.0
@@ -156,14 +125,14 @@ jobs:
         chmod +x deploy.sh
         
         # Ejecutar deploy en la VM
-        echo "🚀 Desplegando a VM: ${{ steps.get-vm-info.outputs.vm-name }}"
-        scp -o StrictHostKeyChecking=no deploy.sh azureuser@${{ steps.get-vm-info.outputs.vm-ip }}:/home/azureuser/
-        ssh -o StrictHostKeyChecking=no azureuser@${{ steps.get-vm-info.outputs.vm-ip }} "cd /home/azureuser && ./deploy.sh"
+        echo "🚀 Desplegando a VM: ${{ steps.get-vm-ip.outputs.vm-name }}"
+        scp -o StrictHostKeyChecking=no deploy.sh azureuser@${{ steps.get-vm-ip.outputs.vm-ip }}:/home/azureuser/
+        ssh -o StrictHostKeyChecking=no azureuser@${{ steps.get-vm-ip.outputs.vm-ip }} "cd /home/azureuser && ./deploy.sh"
     
     - name: Verify deployment
       run: |
         echo "🔍 Verificando deploy..."
-        ssh -o StrictHostKeyChecking=no azureuser@${{ steps.get-vm-info.outputs.vm-ip }} "
+        ssh -o StrictHostKeyChecking=no azureuser@${{ steps.get-vm-ip.outputs.vm-ip }} "
           echo '📊 Estado del sistema:'
           docker ps
           echo ''
@@ -173,3 +142,5 @@ jobs:
           echo '💾 Uso de memoria:'
           free -h
         "
+
+        
