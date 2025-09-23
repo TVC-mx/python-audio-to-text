@@ -1,30 +1,14 @@
-# 🚀 GitHub Actions Workflows
+# 🚀 GitHub Actions Workflow
 
-Este directorio contiene los workflows de GitHub Actions para automatizar el despliegue y monitoreo del sistema de transcripción de audio en Azure VM.
+Este directorio contiene el workflow de GitHub Actions para automatizar el despliegue del sistema de transcripción de audio en Azure VM usando Azure Key Vault.
 
-## 📋 **Workflows Disponibles**
+## 📋 **Workflow Disponible**
 
-### **1. `setup-vm.yml` - Configuración Inicial de VM**
-- **Trigger**: Manual (`workflow_dispatch`)
-- **Propósito**: Crear y configurar una nueva VM en Azure
-- **Funciones**:
-  - Crear grupo de recursos
-  - Crear VM con GPU
-  - Instalar Docker y drivers NVIDIA
-  - Configurar soporte para GPU
-  - Verificar configuración
-
-**Uso:**
-```bash
-# Ejecutar desde GitHub Actions
-# Actions → Setup Azure VM → Run workflow
-```
-
-### **2. `deploy.yml` - Despliegue Automático**
+### **`deploy.yml` - Despliegue Automático**
 - **Trigger**: 
   - Push a `main`
   - Manual (`workflow_dispatch`)
-- **Propósito**: Desplegar cambios automáticamente a la VM usando Key Vault
+- **Propósito**: Desplegar cambios automáticamente a la VM usando Azure Key Vault
 - **Funciones**:
   - Obtener clave SSH desde Azure Key Vault
   - Detener contenedores existentes
@@ -41,39 +25,6 @@ git push origin main
 # Actions → Deploy to Azure VM → Run workflow
 ```
 
-### **3. `monitor.yml` - Monitoreo Automático**
-- **Trigger**: 
-  - Cada 6 horas (`cron: '0 */6 * * *'`)
-  - Manual (`workflow_dispatch`)
-- **Propósito**: Monitorear el estado de la VM y procesamiento
-- **Funciones**:
-  - Verificar estado del sistema
-  - Monitorear uso de GPU
-  - Verificar estado de Docker
-  - Generar reportes de monitoreo
-
-**Uso:**
-```bash
-# Automático cada 6 horas
-# Manual desde GitHub Actions
-# Actions → Monitor Azure VM → Run workflow
-```
-
-### **4. `cleanup.yml` - Gestión de Recursos**
-- **Trigger**: Manual (`workflow_dispatch`)
-- **Propósito**: Gestionar recursos de Azure
-- **Funciones**:
-  - Detener VM (ahorro de costos)
-  - Iniciar VM
-  - Reiniciar VM
-  - Eliminar VM y recursos
-
-**Uso:**
-```bash
-# Manual desde GitHub Actions
-# Actions → Cleanup Azure Resources → Run workflow
-```
-
 ## 🔐 **Secrets Requeridos**
 
 Configura estos secrets en tu repositorio GitHub:
@@ -84,50 +35,28 @@ Configura estos secrets en tu repositorio GitHub:
 - `AZURE_TENANT_ID`: ID del tenant de Azure
 - `AZURE_SUBSCRIPTION_ID`: ID de la suscripción de Azure
 
-### **SSH Access:**
-- `SSH_PRIVATE_KEY`: Clave privada SSH para acceder a la VM
+### **Key Vault Configuration:**
+- `KEY_VAULT_NAME`: Nombre de tu Azure Key Vault
+- `SSH_KEY_SECRET_NAME`: Nombre del secret que contiene la clave SSH
+- `RESOURCE_GROUP_NAME`: Nombre del grupo de recursos
+- `VM_NAME`: Nombre de la VM
 
-## 🚀 **Flujo de Trabajo Recomendado**
+## 🚀 **Flujo de Trabajo**
 
 ### **Paso 1: Configuración Inicial**
 1. Configurar secrets en GitHub
-2. Ejecutar `setup-vm.yml` para crear VM
+2. Crear VM manualmente en Azure
 3. Configurar variables de entorno en la VM
 
 ### **Paso 2: Desarrollo y Deploy**
 1. Hacer cambios en el código
 2. Hacer push a `main` (deploy automático)
-3. Monitorear con `monitor.yml`
-
-### **Paso 3: Gestión de Costos**
-1. Usar `cleanup.yml` para detener VM cuando no se use
-2. Usar `cleanup.yml` para iniciar VM cuando se necesite
-3. Monitorear costos en Azure Portal
-
-## 📊 **Monitoreo y Alertas**
-
-### **Métricas Monitoreadas:**
-- Uso de CPU
-- Uso de RAM
-- Uso de GPU
-- Estado de Docker
-- Archivos procesados
-- Errores en logs
-
-### **Alertas Automáticas:**
-- VM no disponible
-- Contenedor falló
-- Errores en procesamiento
-- Recursos agotados
+3. Verificar logs en GitHub Actions
 
 ## 🔧 **Configuración Avanzada**
 
-### **Personalizar Workflows:**
+### **Personalizar Workflow:**
 ```yaml
-# Cambiar frecuencia de monitoreo
-schedule:
-  - cron: '0 */2 * * *'  # Cada 2 horas
-
 # Cambiar tamaño de VM
 vm_size: 'Standard_NC4as_T4_v3'  # T4 GPU
 ```
