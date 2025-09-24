@@ -155,7 +155,12 @@ jobs:
         ssh-add /tmp/ssh_private_key
         
         # Verificar que la clave se agregó correctamente
+        echo "🔍 Claves SSH disponibles:"
         ssh-add -l
+        
+        # Mostrar fingerprint de la clave para debug
+        echo "🔍 Fingerprint de la clave SSH:"
+        ssh-keygen -lf /tmp/ssh_private_key
         
         echo "✅ SSH agent configurado correctamente"
     
@@ -213,7 +218,16 @@ jobs:
         
         # Ejecutar deploy en la VM
         echo "🚀 Desplegando a VM: ${{ steps.get-vm-info.outputs.vm-name }}"
+        
+        # Probar conexión SSH primero
+        echo "🔍 Probando conexión SSH..."
+        ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 azureuser@${{ steps.get-vm-info.outputs.vm-ip }} "echo 'Conexión SSH exitosa'"
+        
+        # Si la conexión es exitosa, proceder con el deploy
+        echo "📁 Copiando archivos a la VM..."
         scp -o StrictHostKeyChecking=no deploy.sh azureuser@${{ steps.get-vm-info.outputs.vm-ip }}:/home/azureuser/
+        
+        echo "🚀 Ejecutando deploy en la VM..."
         ssh -o StrictHostKeyChecking=no azureuser@${{ steps.get-vm-info.outputs.vm-ip }} "cd /home/azureuser && ./deploy.sh"
     
     - name: Verify deployment
