@@ -86,10 +86,10 @@ jobs:
         
         # El workflow detecta automáticamente la SSH key con patrón tvc-audio2text-*-ssh-key-*
         
-        # Buscar SSH key con patrón tvc-audio2text-*-ssh-key-*
+        # Buscar SSH key con patrón tvc-audio2text-*-ssh-key-* (excluyendo -name)
         SSH_KEY_NAME=$(az keyvault secret list \
           --vault-name ${{ steps.get-vm-info.outputs.key-vault-name }} \
-          --query "[?contains(name, 'tvc-audio2text') && contains(name, 'ssh-key')].name" \
+          --query "[?contains(name, 'tvc-audio2text') && contains(name, 'ssh-key') && !contains(name, '-name')].name" \
           --output tsv | head -1)
         
         if [ -z "$SSH_KEY_NAME" ]; then
