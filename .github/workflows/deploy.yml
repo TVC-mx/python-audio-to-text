@@ -183,15 +183,8 @@ jobs:
         echo "🧹 Limpiando imágenes antiguas..."
         docker system prune -f || true
         
-        # Clonar/actualizar repositorio
-        echo "📥 Actualizando código..."
-        if [ -d "python-audio-to-text" ]; then
-          cd python-audio-to-text
-          git pull origin main
-        else
-          git clone https://github.com/TVC-mx/python-audio-to-text.git
-          cd python-audio-to-text
-        fi
+        # El código ya está copiado por el workflow, no necesitamos git pull
+        echo "📥 Código ya disponible en la VM..."
         
         # Verificar que .env existe
         if [ ! -f ".env" ]; then
@@ -227,8 +220,17 @@ jobs:
         echo "📁 Copiando archivos a la VM..."
         scp -o StrictHostKeyChecking=no deploy.sh azureuser@${{ steps.get-vm-info.outputs.vm-ip }}:/home/azureuser/
         
+        # Copiar todo el código del repositorio
+        echo "📁 Copiando código del repositorio..."
+        tar -czf /tmp/repo.tar.gz .
+        scp -o StrictHostKeyChecking=no /tmp/repo.tar.gz azureuser@${{ steps.get-vm-info.outputs.vm-ip }}:/home/azureuser/
+        
         echo "🚀 Ejecutando deploy en la VM..."
-        ssh -o StrictHostKeyChecking=no azureuser@${{ steps.get-vm-info.outputs.vm-ip }} "cd /home/azureuser && ./deploy.sh"
+        ssh -o StrictHostKeyChecking=no azureuser@${{ steps.get-vm-info.outputs.vm-ip }} "
+          cd /home/azureuser
+          tar -xzf repo.tar.gz
+          ./deploy.sh
+        "
     
     - name: Verify deployment
       run: |
