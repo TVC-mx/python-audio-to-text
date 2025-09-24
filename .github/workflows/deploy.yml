@@ -111,6 +111,32 @@ jobs:
           --query value \
           --output tsv)
         
+        # Verificar que la clave no esté vacía
+        if [ -z "$SSH_PRIVATE_KEY" ]; then
+          echo "❌ La clave SSH está vacía en Key Vault"
+          exit 1
+        fi
+        
+        # Verificar formato de la clave SSH
+        echo "🔍 Verificando formato de la clave SSH..."
+        if echo "$SSH_PRIVATE_KEY" | head -1 | grep -q "BEGIN.*PRIVATE KEY"; then
+          echo "✅ Formato de clave SSH válido"
+        else
+          echo "⚠️ Clave SSH no está en formato PEM, intentando decodificar Base64..."
+          # Intentar decodificar Base64
+          SSH_PRIVATE_KEY=$(echo "$SSH_PRIVATE_KEY" | base64 -d 2>/dev/null || echo "$SSH_PRIVATE_KEY")
+          
+          # Verificar nuevamente
+          if echo "$SSH_PRIVATE_KEY" | head -1 | grep -q "BEGIN.*PRIVATE KEY"; then
+            echo "✅ Clave SSH decodificada correctamente"
+          else
+            echo "❌ Formato de clave SSH inválido. Debe comenzar con 'BEGIN ... PRIVATE KEY'"
+            echo "🔍 Primeras líneas de la clave:"
+            echo "$SSH_PRIVATE_KEY" | head -3
+            exit 1
+          fi
+        fi
+        
         # Guardar en variable de salida
         echo "ssh-private-key=$SSH_PRIVATE_KEY" >> $GITHUB_OUTPUT
         
