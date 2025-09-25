@@ -28,7 +28,13 @@ class Config:
     CPU_OPTIMIZED = os.getenv('CPU_OPTIMIZED', 'true').lower() == 'true'
     # Detectar automáticamente el número de CPUs disponibles
     _DETECTED_CPUS = multiprocessing.cpu_count()
-    MAX_CPU_WORKERS = int(os.getenv('MAX_CPU_WORKERS', _DETECTED_CPUS))  # Número de workers para CPU
+    
+    # Manejar MAX_CPU_WORKERS con soporte para 'auto'
+    _max_cpu_workers_env = os.getenv('MAX_CPU_WORKERS', str(_DETECTED_CPUS))
+    if _max_cpu_workers_env.lower() == 'auto':
+        MAX_CPU_WORKERS = _DETECTED_CPUS
+    else:
+        MAX_CPU_WORKERS = int(_max_cpu_workers_env)
     ENABLE_PARALLEL_DOWNLOADS = os.getenv('ENABLE_PARALLEL_DOWNLOADS', 'true').lower() == 'true'
     ENABLE_PARALLEL_TRANSCRIPTIONS = os.getenv('ENABLE_PARALLEL_TRANSCRIPTIONS', 'true').lower() == 'true'
     
