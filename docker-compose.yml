@@ -43,11 +43,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: 24G
-          cpus: '14.0'
+          memory: 16G
+          cpus: '6.0'
         reservations:
-          memory: 12G
-          cpus: '4.0'
+          memory: 8G
+          cpus: '2.0'
 
 networks:
   audio-network:
