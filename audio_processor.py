@@ -275,6 +275,9 @@ class AudioProcessor:
         logger.info(f"  - Cache habilitado: {self.config.MODEL_CACHE_ENABLED}")
         logger.info(f"  - Modelo persistente: {self.config.PERSISTENT_MODEL}")
         
+        # Lista de modelos de fallback en orden de preferencia
+        fallback_models = ['medium', 'small', 'base', 'tiny']
+        
         try:
             logger.info("🚀 Obteniendo modelo del cache global...")
             # Usar cache global del modelo
@@ -286,6 +289,29 @@ class AudioProcessor:
             logger.info(f"📊 Información del modelo:")
             logger.info(f"  - Modelo activo: {self.config.WHISPER_MODEL}")
             logger.info(f"  - Modelo en memoria: {self.model is not None}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error cargando modelo {self.config.WHISPER_MODEL}: {e}")
+            logger.warning(f"⚠️ Intentando modelos de fallback...")
+            
+            # Intentar modelos de fallback
+            for fallback_model in fallback_models:
+                if fallback_model == self.config.WHISPER_MODEL:
+                    continue  # Saltar el modelo que ya falló
+                    
+                try:
+                    logger.info(f"🔄 Intentando modelo de fallback: {fallback_model}")
+                    self.model = model_cache.get_model(fallback_model)
+                    logger.success(f"✅ Modelo de fallback cargado: {fallback_model}")
+                    logger.warning(f"⚠️ Usando modelo {fallback_model} en lugar de {self.config.WHISPER_MODEL}")
+                    break
+                except Exception as fallback_error:
+                    logger.error(f"❌ Error con modelo de fallback {fallback_model}: {fallback_error}")
+                    continue
+            
+            if self.model is None:
+                logger.error("❌ No se pudo cargar ningún modelo de Whisper")
+                raise Exception("No se pudo cargar ningún modelo de Whisper disponible")
             logger.info(f"  - Tipo de modelo: {type(self.model)}")
             
             # Verificar configuración del procesador

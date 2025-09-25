@@ -30,9 +30,9 @@ services:
       - MAX_CONCURRENT_DOWNLOADS=${MAX_CONCURRENT_DOWNLOADS:-3}
       - MAX_CONCURRENT_TRANSCRIPTIONS=${MAX_CONCURRENT_TRANSCRIPTIONS:-2}
       
-      # Configuración optimizada para CPU
+      # Configuración optimizada para CPU (16 CPUs disponibles)
       - CPU_OPTIMIZED=${CPU_OPTIMIZED:-true}
-      - MAX_CPU_WORKERS=${MAX_CPU_WORKERS:-4}
+      - MAX_CPU_WORKERS=${MAX_CPU_WORKERS:-12}
       - ENABLE_PARALLEL_DOWNLOADS=${ENABLE_PARALLEL_DOWNLOADS:-true}
       - ENABLE_PARALLEL_TRANSCRIPTIONS=${ENABLE_PARALLEL_TRANSCRIPTIONS:-true}
       
@@ -40,9 +40,9 @@ services:
       - GPU_OPTIMIZED=${GPU_OPTIMIZED:-false}
       - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
       
-      # Configuración de memoria
-      - MAX_MEMORY_USAGE=${MAX_MEMORY_USAGE:-8G}
-      - CHUNK_SIZE=${CHUNK_SIZE:-5}
+      # Configuración de memoria (64GB RAM disponible)
+      - MAX_MEMORY_USAGE=${MAX_MEMORY_USAGE:-32G}
+      - CHUNK_SIZE=${CHUNK_SIZE:-10}
       
       # Configuración de limpieza automática
       - AUTO_CLEANUP=${AUTO_CLEANUP:-true}
@@ -67,14 +67,15 @@ services:
       - audio-network
     
     # Configuración de recursos (CPU por defecto)
-    deploy:
-      resources:
-        limits:
-          memory: 8G
-          cpus: '4.0'
-        reservations:
-          memory: 4G
-          cpus: '2.0'
+    # Sin restricciones de recursos para aprovechar 16 CPUs y 64GB RAM
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 8G
+    #       cpus: '4.0'
+    #     reservations:
+    #       memory: 4G
+    #       cpus: '2.0'
     
     # Configuración de memoria compartida
     shm_size: 2gb
@@ -102,14 +103,15 @@ services:
       - MYSQL_DATABASE=${MYSQL_DATABASE:-llamadas}
     networks:
       - audio-network
-    deploy:
-      resources:
-        limits:
-          memory: 16G
-          cpus: '4.0'  # Asignar CPUs para el servicio del modelo
-        reservations:
-          memory: 8G
-          cpus: '2.0'
+    # Sin restricciones de recursos para aprovechar 16 CPUs y 64GB RAM
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 16G
+    #       cpus: '4.0'  # Asignar CPUs para el servicio del modelo
+    #     reservations:
+    #       memory: 8G
+    #       cpus: '2.0'
     profiles:
       - cache  # Solo se ejecuta cuando se usa el perfil 'cache'
 
@@ -163,14 +165,15 @@ services:
       - audio-network
     
     # Configuración de recursos para GPU
-    deploy:
-      resources:
-        limits:
-          memory: 16G
-          cpus: '6.0'
-        reservations:
-          memory: 8G
-          cpus: '2.0'
+    # Sin restricciones de recursos para aprovechar 16 CPUs y 64GB RAM
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 16G
+    #       cpus: '6.0'
+    #     reservations:
+    #       memory: 8G
+    #       cpus: '2.0'
     
     # Configuración de memoria compartida para GPU
     shm_size: 4gb
