@@ -165,20 +165,28 @@ def main():
         
         # Verificar conexión a la base de datos
         logger.info("🔍 PASO 2: Verificando conexión a la base de datos...")
-        if not db_manager.test_connection():
-            logger.error("❌ No se pudo conectar a la base de datos")
-            logger.error("🔧 Verificar configuración de MySQL en .env")
+        try:
+            if not db_manager.test_connection():
+                logger.error("❌ No se pudo conectar a la base de datos")
+                logger.error("🔧 Verificar configuración de MySQL en .env")
+                sys.exit(1)
+            logger.info("✅ Conexión a la base de datos exitosa")
+        except Exception as e:
+            logger.error(f"❌ Error verificando conexión a la base de datos: {e}")
             sys.exit(1)
         
-        logger.info("✅ Conexión a la base de datos exitosa")
-        
         logger.info("🔍 PASO 3: Ejecutando consulta SQL...")
-        calls_data = db_manager.get_calls_by_date_range(
-            start_date, 
-            end_date, 
-            args.query
-        )
-        logger.info(f"📊 Consulta completada. Resultados: {len(calls_data) if calls_data else 0} llamadas")
+        try:
+            calls_data = db_manager.get_calls_by_date_range(
+                start_date, 
+                end_date, 
+                args.query
+            )
+            logger.info(f"📊 Consulta completada. Resultados: {len(calls_data) if calls_data else 0} llamadas")
+        except Exception as e:
+            logger.error(f"❌ Error ejecutando consulta SQL: {e}")
+            logger.error("🔧 Verificar configuración de la base de datos")
+            sys.exit(1)
         
         if not calls_data:
             logger.warning("No se encontraron llamadas en el rango de fechas especificado")
@@ -259,10 +267,15 @@ def main():
             sys.exit(2)  # Todo falló
             
     except KeyboardInterrupt:
-        logger.info("Procesamiento interrumpido por el usuario")
+        logger.info("🛑 Procesamiento interrumpido por el usuario")
         sys.exit(130)
     except Exception as e:
-        logger.error(f"Error inesperado: {e}")
+        logger.error(f"❌ Error inesperado: {e}")
+        logger.error(f"🔧 Tipo de error: {type(e).__name__}")
+        logger.error(f"🔧 Detalles del error: {str(e)}")
+        import traceback
+        logger.error(f"🔧 Stack trace: {traceback.format_exc()}")
+        logger.error("🔧 Verificar configuración y logs para más detalles")
         sys.exit(1)
 
 if __name__ == "__main__":

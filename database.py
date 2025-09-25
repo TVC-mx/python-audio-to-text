@@ -106,13 +106,25 @@ class DatabaseManager:
     def test_connection(self) -> bool:
         """Prueba la conexión a la base de datos"""
         try:
+            logger.info("🔍 Verificando conexión a la base de datos...")
+            logger.info(f"📊 Configuración de conexión:")
+            logger.info(f"  - Host: {self.config.MYSQL_HOST}")
+            logger.info(f"  - Puerto: {self.config.MYSQL_PORT}")
+            logger.info(f"  - Usuario: {self.config.MYSQL_USER}")
+            logger.info(f"  - Base de datos: {self.config.MYSQL_DATABASE}")
+            
             if not self.connection or not self.connection.is_connected():
+                logger.info("🔄 Conexión no existe o no está activa, intentando conectar...")
                 return self.connect()
             
+            logger.info("✅ Conexión existe, probando con consulta simple...")
             cursor = self.connection.cursor()
             cursor.execute("SELECT 1")
             cursor.close()
+            logger.info("✅ Conexión a la base de datos exitosa")
             return True
         except Error as e:
-            logger.error(f"Error probando conexión: {e}")
+            logger.error(f"❌ Error probando conexión: {e}")
+            logger.error(f"🔧 Tipo de error: {type(e).__name__}")
+            logger.error(f"🔧 Detalles: {str(e)}")
             return False
