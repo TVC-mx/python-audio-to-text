@@ -4,6 +4,8 @@ services:
     build: .
     container_name: audio-to-text-processor
     volumes:
+      # Montar código fuente para cambios en tiempo real (desarrollo)
+      - .:/app
       # Montar directorios para persistir datos
       - ./audios:/app/audios
       - ./textos:/app/textos
@@ -83,6 +85,8 @@ services:
     container_name: whisper-model-cache
     command: python whisper_service.py
     volumes:
+      # Montar código fuente para cambios en tiempo real (desarrollo)
+      - .:/app
       - ./audios:/app/audios
       - ./textos:/app/textos
       - ./logs:/app/logs
@@ -116,6 +120,8 @@ services:
       dockerfile: Dockerfile.gpu
     container_name: audio-to-text-processor-gpu
     volumes:
+      # Montar código fuente para cambios en tiempo real (desarrollo)
+      - .:/app
       - ./audios:/app/audios
       - ./textos:/app/textos
       - ./logs:/app/logs
