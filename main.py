@@ -145,19 +145,26 @@ def main():
             sys.exit(1)
         
         # Obtener llamadas del rango de fechas
-        logger.info("Obteniendo llamadas de la base de datos...")
+        logger.info("🔍 PASO 1: Obteniendo llamadas de la base de datos...")
+        logger.info(f"📅 Rango de fechas: {start_date} a {end_date}")
+        logger.info(f"🔍 Query personalizada: {args.query if args.query else 'Ninguna'}")
+        
         # Verificar conexión a la base de datos
+        logger.info("🔍 PASO 2: Verificando conexión a la base de datos...")
         if not db_manager.test_connection():
-            logger.error("No se pudo conectar a la base de datos")
+            logger.error("❌ No se pudo conectar a la base de datos")
+            logger.error("🔧 Verificar configuración de MySQL en .env")
             sys.exit(1)
         
-        logger.info("Conexión a la base de datos exitosa")
+        logger.info("✅ Conexión a la base de datos exitosa")
         
+        logger.info("🔍 PASO 3: Ejecutando consulta SQL...")
         calls_data = db_manager.get_calls_by_date_range(
             start_date, 
             end_date, 
             args.query
         )
+        logger.info(f"📊 Consulta completada. Resultados: {len(calls_data) if calls_data else 0} llamadas")
         
         if not calls_data:
             logger.warning("No se encontraron llamadas en el rango de fechas especificado")
@@ -198,8 +205,17 @@ def main():
             return
         
         # Procesar llamadas
-        logger.info("Iniciando procesamiento de audios...")
+        logger.info("🔍 PASO 4: Iniciando procesamiento de audios...")
+        logger.info(f"🎯 Total de llamadas a procesar: {len(calls_data)}")
+        logger.info("🔧 Configuración del procesador:")
+        logger.info(f"  - Modelo Whisper: {audio_processor.config.WHISPER_MODEL}")
+        logger.info(f"  - Workers CPU: {audio_processor.config.MAX_CPU_WORKERS}")
+        logger.info(f"  - Limpieza automática: {audio_processor.config.AUTO_CLEANUP}")
+        logger.info(f"  - Optimización CPU: {audio_processor.config.CPU_OPTIMIZED}")
+        
+        logger.info("🚀 Iniciando procesamiento en lote...")
         results = audio_processor.process_calls_batch(calls_data)
+        logger.info(f"✅ Procesamiento completado. Resultados: {len(results)} llamadas procesadas")
         
         # Cerrar conexión a la base de datos
         db_manager.disconnect()

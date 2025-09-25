@@ -790,8 +790,12 @@ class AudioProcessor:
         Returns:
             Diccionario con el resultado del procesamiento
         """
+        call_id = call_data.get('id')
+        logger.info(f"🔍 PASO 5: Procesando llamada individual ID: {call_id}")
+        logger.info(f"📊 Datos de la llamada: {call_data.get('user_type', 'N/A')} - {call_data.get('fecha_llamada', 'N/A')}")
+        
         result = {
-            'call_id': call_data.get('id'),
+            'call_id': call_id,
             'success': False,
             'audio_path': None,
             'transcript_path': None,
@@ -800,6 +804,7 @@ class AudioProcessor:
         }
         
         try:
+            logger.info(f"🔍 PASO 5.1: Obteniendo URL del audio para ID: {call_id}")
             # Obtener URL del audio (ya viene completa desde la base de datos)
             audio_url = call_data.get('audio_path', '')
             
@@ -930,24 +935,41 @@ class AudioProcessor:
         Returns:
             Lista de resultados del procesamiento en orden cronológico
         """
+        logger.info("🔍 PASO 4.1: Iniciando procesamiento en lote...")
+        logger.info(f"📊 Total de llamadas recibidas: {len(calls_data)}")
+        
         # Verificar que las llamadas estén ordenadas por fecha
-        logger.info("Verificando orden cronológico de llamadas...")
+        logger.info("🔍 PASO 4.2: Verificando orden cronológico de llamadas...")
         self._log_call_order(calls_data[:5])  # Mostrar las primeras 5 para verificación
         
         # Configurar workers según el tipo de procesamiento
+        logger.info("🔍 PASO 4.3: Configurando workers de procesamiento...")
         if self.config.CPU_OPTIMIZED:
             max_workers = min(self.config.MAX_CPU_WORKERS, len(calls_data))
-            logger.info(f"Procesamiento optimizado para CPU: {max_workers} workers")
+            logger.info(f"✅ Procesamiento optimizado para CPU: {max_workers} workers")
+            logger.info(f"🔧 Configuración CPU: MAX_CPU_WORKERS={self.config.MAX_CPU_WORKERS}")
         else:
             max_workers = self.config.MAX_CONCURRENT_TRANSCRIPTIONS
-            logger.info(f"Procesamiento estándar: {max_workers} workers")
+            logger.info(f"✅ Procesamiento estándar: {max_workers} workers")
+            logger.info(f"🔧 Configuración estándar: MAX_CONCURRENT_TRANSCRIPTIONS={self.config.MAX_CONCURRENT_TRANSCRIPTIONS}")
+        
+        logger.info(f"🎯 Workers configurados: {max_workers}")
+        logger.info(f"🔧 Chunk size: {self.config.CHUNK_SIZE}")
+        logger.info(f"🔧 Memoria máxima: {self.config.MAX_MEMORY_USAGE}")
         
         results = []
         
         # Procesar en chunks si está habilitado
+        logger.info("🔍 PASO 4.4: Decidiendo estrategia de procesamiento...")
         if self.config.CPU_OPTIMIZED and len(calls_data) > self.config.CHUNK_SIZE:
-            logger.info(f"Procesando en chunks de {self.config.CHUNK_SIZE} llamadas")
+            logger.info(f"✅ Procesando en chunks de {self.config.CHUNK_SIZE} llamadas")
+            logger.info(f"🔧 Total de llamadas: {len(calls_data)}, Chunk size: {self.config.CHUNK_SIZE}")
+            logger.info("🚀 Iniciando procesamiento por chunks...")
             return self._process_calls_in_chunks(calls_data, max_workers)
+        else:
+            logger.info("✅ Procesamiento directo (sin chunks)")
+            logger.info(f"🔧 Total de llamadas: {len(calls_data)}, Chunk size: {self.config.CHUNK_SIZE}")
+            logger.info("🚀 Iniciando procesamiento directo...")
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Enviar todas las tareas manteniendo el orden
@@ -1010,10 +1032,15 @@ class AudioProcessor:
         """
         Procesa llamadas en chunks para optimizar el uso de memoria en CPU
         """
+        logger.info("🔍 PASO 4.5: Iniciando procesamiento por chunks...")
         chunk_size = self.config.CHUNK_SIZE
         total_chunks = (len(calls_data) + chunk_size - 1) // chunk_size
         
-        logger.info(f"Procesando {len(calls_data)} llamadas en {total_chunks} chunks de {chunk_size}")
+        logger.info(f"📊 Configuración de chunks:")
+        logger.info(f"  - Total de llamadas: {len(calls_data)}")
+        logger.info(f"  - Tamaño de chunk: {chunk_size}")
+        logger.info(f"  - Total de chunks: {total_chunks}")
+        logger.info(f"  - Workers por chunk: {max_workers}")
         
         all_results = []
         
@@ -1021,11 +1048,13 @@ class AudioProcessor:
             chunk = calls_data[chunk_idx:chunk_idx + chunk_size]
             chunk_num = (chunk_idx // chunk_size) + 1
             
-            logger.progress(f"Procesando chunk {chunk_num}/{total_chunks}", 
-                          details=f"Llamadas: {len(chunk)}")
+            logger.info(f"🔍 PASO 4.5.{chunk_num}: Procesando chunk {chunk_num}/{total_chunks}")
+            logger.info(f"📊 Chunk {chunk_num}: {len(chunk)} llamadas")
+            logger.info(f"🔧 Workers para este chunk: {min(max_workers, len(chunk))}")
             
             # Procesar chunk con workers limitados
             chunk_workers = min(max_workers, len(chunk))
+            logger.info(f"🚀 Iniciando procesamiento del chunk {chunk_num}...")
             chunk_results = self._process_chunk(chunk, chunk_workers)
             all_results.extend(chunk_results)
             
@@ -1040,14 +1069,24 @@ class AudioProcessor:
         """
         Procesa un chunk de llamadas
         """
+        logger.info(f"🔍 PASO 4.6: Procesando chunk con {len(chunk_data)} llamadas")
+        logger.info(f"🔧 Workers disponibles: {max_workers}")
+        logger.info(f"🚀 Iniciando ThreadPoolExecutor...")
+        
         results = []
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            logger.info(f"✅ ThreadPoolExecutor creado con {max_workers} workers")
+            
             # Enviar tareas del chunk
+            logger.info(f"📤 Enviando {len(chunk_data)} tareas al executor...")
             future_to_call = {}
             for i, call_data in enumerate(chunk_data):
+                logger.debug(f"📤 Enviando tarea {i+1}/{len(chunk_data)}: ID {call_data.get('id')}")
                 future = executor.submit(self.process_single_call, call_data)
                 future_to_call[future] = (i, call_data)
+            
+            logger.info(f"✅ Todas las tareas enviadas. Esperando resultados...")
             
             # Crear diccionario para mantener orden
             results_dict = {}
