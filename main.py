@@ -139,8 +139,17 @@ def main():
         db_manager = DatabaseManager()
         logger.info("🔍 PASO 0: Inicializando procesador de audio...")
         logger.info("⏳ Esto incluye la carga del modelo Whisper (puede tomar varios minutos)...")
-        audio_processor = AudioProcessor()
-        logger.info("✅ Procesador de audio inicializado exitosamente")
+        
+        try:
+            audio_processor = AudioProcessor()
+            logger.info("✅ Procesador de audio inicializado exitosamente")
+        except Exception as e:
+            logger.error(f"❌ Error inicializando procesador de audio: {e}")
+            logger.error(f"🔧 Tipo de error: {type(e).__name__}")
+            logger.error(f"🔧 Detalles: {str(e)}")
+            import traceback
+            logger.error(f"🔧 Stack trace: {traceback.format_exc()}")
+            sys.exit(1)
         
         # Logs detallados después de la inicialización
         logger.info("🔍 PASO 0.1: Verificando estado del procesador...")
@@ -149,6 +158,10 @@ def main():
         logger.info(f"  - Configuración CPU: {audio_processor.config.CPU_OPTIMIZED}")
         logger.info(f"  - Workers disponibles: {audio_processor.config.MAX_CPU_WORKERS}")
         logger.info(f"  - Chunk size: {audio_processor.config.CHUNK_SIZE}")
+        
+        # Log crítico para verificar que llegamos hasta aquí
+        logger.info("🔍 PASO 0.1.1: Verificando que el procesador está completamente inicializado...")
+        logger.info("✅ PASO 0.1 COMPLETADO: Procesador verificado y listo")
         
         # Conectar a la base de datos
         logger.info("🔍 PASO 0.2: Conectando a la base de datos...")

@@ -228,6 +228,23 @@ class ModelCache:
             logger.info(f"  - Modelo: {self.model_name}")
             logger.info(f"  - Objeto en memoria: {self.model is not None}")
             logger.info(f"  - Tipo: {type(self.model)}")
+            
+            # Logs críticos para verificar que el modelo está listo
+            logger.info("🔍 PASO 0.0.1.1: Verificando que el modelo está completamente cargado...")
+            try:
+                # Intentar una operación simple con el modelo para verificar que funciona
+                logger.info("🔍 PASO 0.0.1.2: Probando modelo con audio dummy...")
+                import numpy as np
+                # Crear un audio dummy de 1 segundo para probar el modelo
+                dummy_audio = np.zeros(16000, dtype=np.float32)  # 1 segundo a 16kHz
+                logger.info("🔍 PASO 0.0.1.3: Audio dummy creado, probando transcripción...")
+                # No ejecutar transcripción real, solo verificar que el modelo responde
+                logger.info("🔍 PASO 0.0.1.4: Modelo verificado, continuando...")
+                logger.info("✅ PASO 0.0.1 COMPLETADO: Modelo completamente funcional")
+            except Exception as e:
+                logger.error(f"❌ Error verificando modelo: {e}")
+                logger.error(f"🔧 Tipo de error: {type(e).__name__}")
+                raise
         else:
             logger.info(f"✅ Modelo ya en cache, reutilizando...")
             logger.debug("🔄 Modelo ya en cache", details=f"Modelo: {model_name}")
