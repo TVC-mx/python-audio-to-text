@@ -137,12 +137,26 @@ def main():
         
         # Inicializar componentes
         db_manager = DatabaseManager()
+        logger.info("🔍 PASO 0: Inicializando procesador de audio...")
+        logger.info("⏳ Esto incluye la carga del modelo Whisper (puede tomar varios minutos)...")
         audio_processor = AudioProcessor()
+        logger.info("✅ Procesador de audio inicializado exitosamente")
+        
+        # Logs detallados después de la inicialización
+        logger.info("🔍 PASO 0.1: Verificando estado del procesador...")
+        logger.info(f"📊 Estado del procesador:")
+        logger.info(f"  - Modelo cargado: {audio_processor.model is not None}")
+        logger.info(f"  - Configuración CPU: {audio_processor.config.CPU_OPTIMIZED}")
+        logger.info(f"  - Workers disponibles: {audio_processor.config.MAX_CPU_WORKERS}")
+        logger.info(f"  - Chunk size: {audio_processor.config.CHUNK_SIZE}")
         
         # Conectar a la base de datos
+        logger.info("🔍 PASO 0.2: Conectando a la base de datos...")
         if not db_manager.test_connection():
-            logger.error("No se pudo conectar a la base de datos")
+            logger.error("❌ No se pudo conectar a la base de datos")
+            logger.error("🔧 Verificar configuración de MySQL en .env")
             sys.exit(1)
+        logger.info("✅ Conexión a la base de datos exitosa")
         
         # Obtener llamadas del rango de fechas
         logger.info("🔍 PASO 1: Obteniendo llamadas de la base de datos...")

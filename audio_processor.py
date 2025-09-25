@@ -207,14 +207,32 @@ class ModelCache:
     
     def get_model(self, model_name: str):
         """Obtener modelo del cache o cargarlo si no existe"""
+        logger.info(f"🔍 PASO 0.0: Verificando cache del modelo...")
+        logger.info(f"📊 Estado del cache:")
+        logger.info(f"  - Modelo en cache: {self.model_name}")
+        logger.info(f"  - Modelo solicitado: {model_name}")
+        logger.info(f"  - Cache disponible: {self.model is not None}")
+        
         if self.model is None or self.model_name != model_name:
-            logger.progress("Cargando modelo en cache", details=f"Modelo: {model_name}")
+            logger.info(f"🔄 Modelo no está en cache, iniciando descarga...")
+            logger.progress("📥 Cargando modelo en cache", details=f"Modelo: {model_name}")
+            logger.info(f"⏳ Esto puede tomar varios minutos para modelos grandes...")
+            
+            # Aquí es donde se descarga el modelo
             self.model = whisper.load_model(model_name)
             self.model_name = model_name
-            logger.success("Modelo cargado en cache", details=f"Modelo: {model_name}")
+            
+            logger.success("✅ Modelo cargado en cache", details=f"Modelo: {model_name}")
+            logger.info(f"🔍 PASO 0.0.1: Modelo descargado y cargado exitosamente")
+            logger.info(f"📊 Información del modelo cargado:")
+            logger.info(f"  - Modelo: {self.model_name}")
+            logger.info(f"  - Objeto en memoria: {self.model is not None}")
+            logger.info(f"  - Tipo: {type(self.model)}")
         else:
-            logger.debug("Modelo ya en cache", details=f"Modelo: {model_name}")
+            logger.info(f"✅ Modelo ya en cache, reutilizando...")
+            logger.debug("🔄 Modelo ya en cache", details=f"Modelo: {model_name}")
         
+        logger.info(f"🔍 PASO 0.0.2: Retornando modelo del cache")
         return self.model
     
     def clear_cache(self):
@@ -234,18 +252,55 @@ class AudioProcessor:
     
     def _load_whisper_model(self):
         """Carga el modelo de Whisper usando cache global"""
+        logger.info("🔍 PASO 0: Iniciando carga del modelo Whisper...")
+        logger.info(f"📊 Configuración del modelo:")
+        logger.info(f"  - Modelo solicitado: {self.config.WHISPER_MODEL}")
+        logger.info(f"  - Cache habilitado: {self.config.MODEL_CACHE_ENABLED}")
+        logger.info(f"  - Modelo persistente: {self.config.PERSISTENT_MODEL}")
+        
         try:
+            logger.info("🚀 Obteniendo modelo del cache global...")
             # Usar cache global del modelo
             self.model = model_cache.get_model(self.config.WHISPER_MODEL)
-            logger.success("Modelo Whisper obtenido del cache", details=f"Modelo: {self.config.WHISPER_MODEL}")
+            logger.success("✅ Modelo Whisper obtenido del cache", details=f"Modelo: {self.config.WHISPER_MODEL}")
+            
+            # Logs detallados después de cargar el modelo
+            logger.info("🔍 PASO 0.1: Modelo cargado exitosamente")
+            logger.info(f"📊 Información del modelo:")
+            logger.info(f"  - Modelo activo: {self.config.WHISPER_MODEL}")
+            logger.info(f"  - Modelo en memoria: {self.model is not None}")
+            logger.info(f"  - Tipo de modelo: {type(self.model)}")
+            
+            # Verificar configuración del procesador
+            logger.info("🔍 PASO 0.2: Verificando configuración del procesador...")
+            logger.info(f"📊 Configuración de procesamiento:")
+            logger.info(f"  - CPU optimizado: {self.config.CPU_OPTIMIZED}")
+            logger.info(f"  - Workers CPU: {self.config.MAX_CPU_WORKERS}")
+            logger.info(f"  - Chunk size: {self.config.CHUNK_SIZE}")
+            logger.info(f"  - Memoria máxima: {self.config.MAX_MEMORY_USAGE}")
+            logger.info(f"  - Descargas paralelas: {self.config.ENABLE_PARALLEL_DOWNLOADS}")
+            logger.info(f"  - Transcripciones paralelas: {self.config.ENABLE_PARALLEL_TRANSCRIPTIONS}")
+            
+            # Verificar configuración de limpieza
+            logger.info("🔍 PASO 0.3: Verificando configuración de limpieza...")
+            logger.info(f"📊 Configuración de limpieza:")
+            logger.info(f"  - Limpieza automática: {self.config.AUTO_CLEANUP}")
+            logger.info(f"  - Limpiar audio: {self.config.CLEANUP_AUDIO_FILES}")
+            logger.info(f"  - Limpiar temporales: {self.config.CLEANUP_TEMP_FILES}")
+            logger.info(f"  - Mantener transcripciones: {self.config.KEEP_TRANSCRIPTS}")
+            logger.info(f"  - Delay de limpieza: {self.config.CLEANUP_DELAY}s")
+            
+            logger.info("✅ PASO 0 COMPLETADO: Modelo Whisper listo para procesamiento")
+            
         except Exception as e:
-            logger.error("Error cargando modelo Whisper", details=f"Modelo: {self.config.WHISPER_MODEL}, Error: {e}")
-            logger.progress("Intentando fallback", details="Modelo: tiny")
+            logger.error("❌ Error cargando modelo Whisper", details=f"Modelo: {self.config.WHISPER_MODEL}, Error: {e}")
+            logger.progress("🔄 Intentando fallback", details="Modelo: tiny")
             try:
                 self.model = model_cache.get_model("tiny")
-                logger.success("Modelo fallback cargado del cache", details="Modelo: tiny")
+                logger.success("✅ Modelo fallback cargado del cache", details="Modelo: tiny")
+                logger.info("⚠️ Usando modelo fallback 'tiny' debido a error con modelo principal")
             except Exception as e2:
-                logger.error("Error en fallback", details=f"Error: {e2}")
+                logger.error("❌ Error en fallback", details=f"Error: {e2}")
                 raise
     
     def download_audio(self, audio_url: str, output_path: str) -> bool:
