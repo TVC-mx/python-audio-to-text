@@ -146,6 +146,13 @@ def main():
         
         # Obtener llamadas del rango de fechas
         logger.info("Obteniendo llamadas de la base de datos...")
+        # Verificar conexión a la base de datos
+        if not db_manager.test_connection():
+            logger.error("No se pudo conectar a la base de datos")
+            sys.exit(1)
+        
+        logger.info("Conexión a la base de datos exitosa")
+        
         calls_data = db_manager.get_calls_by_date_range(
             start_date, 
             end_date, 
@@ -154,6 +161,17 @@ def main():
         
         if not calls_data:
             logger.warning("No se encontraron llamadas en el rango de fechas especificado")
+            logger.info("Verificando si hay llamadas en la base de datos...")
+            
+            # Probar con un rango más amplio para verificar que hay datos
+            test_calls = db_manager.get_calls_by_date_range("2020-01-01", "2030-12-31", None)
+            if test_calls:
+                logger.info(f"Se encontraron {len(test_calls)} llamadas en total en la base de datos")
+                logger.info("El problema puede ser que no hay llamadas en el rango específico")
+            else:
+                logger.error("No se encontraron llamadas en la base de datos")
+                logger.error("Verificar configuración de MySQL y datos")
+            
             sys.exit(0)
         
         logger.info(f"Se encontraron {len(calls_data)} llamadas para procesar")
