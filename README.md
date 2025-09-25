@@ -19,10 +19,43 @@ cp env.example .env
 ./script.sh process 2024-01-01 2024-01-31 --mode cache --model small
 ```
 
+## 🔧 Desarrollo Rápido
+
+### **Cambios en Python sin Reconstruir Imagen**
+
+```bash
+# Primera vez (construir imagen)
+docker compose build
+
+# Desarrollo normal (cambios en Python se ven inmediatamente)
+docker compose run --rm audio-to-text python main.py --start-date 2025-01-01 --end-date 2025-01-31
+
+# Editar cualquier archivo Python y ejecutar inmediatamente
+# NO necesitas reconstruir la imagen
+```
+
+### **Cuándo Reconstruir la Imagen**
+
+- ✅ **NO necesitas reconstruir** para cambios en:
+  - `main.py`, `audio_processor.py`, `database.py`, `config.py`
+  - Cualquier archivo `.py`
+  - Archivos de configuración
+
+- ⚠️ **SÍ necesitas reconstruir** para cambios en:
+  - `requirements.txt`
+  - `Dockerfile`
+  - Dependencias del sistema
+
+```bash
+# Solo cuando cambies requirements.txt o Dockerfile
+docker compose build
+```
+
 ## ✨ Características Principales
 
 - ✅ **Sistema Unificado**: Un solo script para todas las opciones
 - ✅ **Múltiples Modos**: CPU, GPU y Cache persistente
+- ✅ **Desarrollo Rápido**: Cambios en Python sin reconstruir imagen
 - ✅ **Procesamiento Paralelo**: Workers configurables
 - ✅ **Limpieza Automática**: Optimización de espacio en disco
 - ✅ **Transcripción Avanzada**: Whisper con múltiples modelos
@@ -35,13 +68,12 @@ cp env.example .env
 ```
 python-audio-to-text/
 ├── script.sh              # Script unificado principal
-├── docker-compose.yml     # Docker Compose con perfiles
+├── docker-compose.yml     # Docker Compose optimizado para desarrollo
 ├── env.example           # Configuración unificada
 ├── audio_processor.py    # Procesamiento de audio y transcripción
 ├── database.py           # Gestión de conexión MySQL
 ├── main.py              # Script principal
 ├── config.py            # Configuración centralizada
-├── check_disk_usage.py  # Utilidad de monitoreo de disco
 ├── requirements.txt     # Dependencias de Python
 ├── Dockerfile          # Imagen Docker estándar
 ├── Dockerfile.gpu      # Imagen Docker para GPU
@@ -53,7 +85,11 @@ python-audio-to-text/
 
 ### **1. Modo CPU (Por defecto)**
 ```bash
+# Usando script.sh
 ./script.sh process 2024-01-01 2024-01-31 --mode cpu --workers 4 --model tiny
+
+# Usando Docker Compose directo
+docker compose run --rm audio-to-text python main.py --start-date 2024-01-01 --end-date 2024-01-31
 ```
 - **Optimizado para**: Sistemas sin GPU
 - **Características**: Procesamiento paralelo en CPU
@@ -61,7 +97,11 @@ python-audio-to-text/
 
 ### **2. Modo GPU**
 ```bash
+# Usando script.sh
 ./script.sh process 2024-01-01 2024-01-31 --mode gpu --model base
+
+# Usando Docker Compose directo
+docker compose run --rm audio-to-text-gpu python main.py --start-date 2024-01-01 --end-date 2024-01-31
 ```
 - **Optimizado para**: Sistemas con GPU NVIDIA
 - **Características**: Aceleración por GPU
@@ -69,11 +109,47 @@ python-audio-to-text/
 
 ### **3. Modo Cache**
 ```bash
+# Usando script.sh
 ./script.sh process 2024-01-01 2024-01-31 --mode cache --model small
+
+# Usando Docker Compose directo
+docker compose run --rm whisper-cache python main.py --start-date 2024-01-01 --end-date 2024-01-31
 ```
 - **Optimizado para**: Procesamiento masivo
 - **Características**: Modelo persistente en memoria
 - **Recomendado para**: Procesamiento de grandes volúmenes
+
+## 🐳 Comandos Docker Compose Directos
+
+### **Comandos Básicos:**
+```bash
+# Construir imagen
+docker compose build
+
+# Ejecutar procesamiento (CPU)
+docker compose run --rm audio-to-text python main.py --start-date 2025-01-01 --end-date 2025-01-31
+
+# Ejecutar procesamiento (GPU)
+docker compose run --rm audio-to-text-gpu python main.py --start-date 2025-01-01 --end-date 2025-01-31
+
+# Ejecutar procesamiento (Cache)
+docker compose run --rm whisper-cache python main.py --start-date 2025-01-01 --end-date 2025-01-31
+```
+
+### **Comandos de Desarrollo:**
+```bash
+# Ver logs en tiempo real
+docker compose logs -f audio-to-text
+
+# Ejecutar shell interactivo
+docker compose run --rm audio-to-text bash
+
+# Ver estado de contenedores
+docker compose ps
+
+# Detener todos los servicios
+docker compose down
+```
 
 ## 🧹 Limpieza Automática
 
@@ -258,6 +334,30 @@ nvidia-smi
 
 # Habilitar limpieza automática
 ./script.sh process 2024-01-01 2024-01-31 --cleanup
+```
+
+#### **5. Problemas de Desarrollo:**
+```bash
+# Cambios en Python no se ven
+# Verificar que el volumen esté montado
+docker compose run --rm audio-to-text ls -la /app
+
+# Reconstruir solo si cambias requirements.txt
+docker compose build
+
+# Ver logs detallados
+docker compose run --rm audio-to-text python main.py --start-date 2025-01-01 --end-date 2025-01-31 --dry-run
+```
+
+#### **6. Problemas de Docker Compose:**
+```bash
+# Limpiar contenedores
+docker compose down
+docker system prune -f
+
+# Reconstruir desde cero
+docker compose build --no-cache
+docker compose up
 ```
 
 ## 📈 Rendimiento Esperado
