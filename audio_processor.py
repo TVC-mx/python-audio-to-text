@@ -11,11 +11,157 @@ import subprocess
 import tempfile
 from pydub import AudioSegment
 import io
+import json
 
 from config import Config
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Configurar logging estructurado con colores
+class ColoredFormatter(logging.Formatter):
+    """Formatter con colores para diferentes niveles de log"""
+    
+    # Códigos de color ANSI
+    COLORS = {
+        'DEBUG': '\033[36m',      # Cyan
+        'INFO': '\033[32m',       # Verde
+        'WARNING': '\033[33m',    # Amarillo
+        'ERROR': '\033[31m',      # Rojo
+        'CRITICAL': '\033[35m',   # Magenta
+        'RESET': '\033[0m'        # Reset
+    }
+    
+    def format(self, record):
+        # Obtener color basado en el nivel
+        color = self.COLORS.get(record.levelname, self.COLORS['RESET'])
+        reset = self.COLORS['RESET']
+        
+        # Aplicar color al nivel
+        record.levelname = f"{color}{record.levelname}{reset}"
+        
+        # Formato base
+        return super().format(record)
+
+class StructuredLogger:
+    def __init__(self, name: str, level: str = "INFO"):
+        self.logger = logging.getLogger(name)
+        
+        # Configurar nivel de logging
+        level_map = {
+            'DEBUG': logging.DEBUG,
+            'INFO': logging.INFO,
+            'WARNING': logging.WARNING,
+            'ERROR': logging.ERROR,
+            'CRITICAL': logging.CRITICAL
+        }
+        self.logger.setLevel(level_map.get(level.upper(), logging.INFO))
+        
+        # Crear handler si no existe
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = ColoredFormatter(
+                '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+    
+    def set_level(self, level: str):
+        """Cambiar el nivel de logging dinámicamente"""
+        level_map = {
+            'DEBUG': logging.DEBUG,
+            'INFO': logging.INFO,
+            'WARNING': logging.WARNING,
+            'ERROR': logging.ERROR,
+            'CRITICAL': logging.CRITICAL
+        }
+        self.logger.setLevel(level_map.get(level.upper(), logging.INFO))
+    
+    def _format_message(self, event: str, file_info: str = "", details: str = "", **kwargs) -> str:
+        """Formatea mensajes de log con estructura clara y colores"""
+        # Emojis y colores para diferentes tipos de eventos
+        event_emojis = {
+            'Cargando modelo Whisper': '🤖',
+            'Modelo Whisper cargado': '✅',
+            'Error cargando modelo Whisper': '❌',
+            'Descargando audio': '⬇️',
+            'Audio descargado': '✅',
+            'Convirtiendo audio': '🔄',
+            'Audio convertido': '✅',
+            'Transcribiendo audio': '🎤',
+            'Transcripción completada': '✅',
+            'Transcripción guardada': '💾',
+            'Procesando llamada': '📞',
+            'Llamada procesada': '✅',
+            'Error': '❌',
+            'Warning': '⚠️',
+            'Info': 'ℹ️'
+        }
+        
+        # Obtener emoji para el evento
+        emoji = event_emojis.get(event, '🎵')
+        parts = [f"{emoji} {event}"]
+        
+        if file_info:
+            # Extraer nombre de archivo limpio
+            filename = os.path.basename(file_info) if file_info else "N/A"
+            parts.append(f"📁 {filename}")
+        
+        if details:
+            parts.append(f"ℹ️  {details}")
+        
+        # Agregar información adicional si existe
+        for key, value in kwargs.items():
+            if value is not None:
+                parts.append(f"{key}: {value}")
+        
+        return " | ".join(parts)
+    
+    def debug(self, event: str, file_info: str = "", details: str = "", **kwargs):
+        """Log de nivel DEBUG con color cyan"""
+        message = self._format_message(event, file_info, details, **kwargs)
+        self.logger.debug(message)
+    
+    def info(self, event: str, file_info: str = "", details: str = "", **kwargs):
+        """Log de nivel INFO con color verde"""
+        message = self._format_message(event, file_info, details, **kwargs)
+        self.logger.info(message)
+    
+    def warning(self, event: str, file_info: str = "", details: str = "", **kwargs):
+        """Log de nivel WARNING con color amarillo"""
+        message = self._format_message(event, file_info, details, **kwargs)
+        self.logger.warning(message)
+    
+    def error(self, event: str, file_info: str = "", details: str = "", **kwargs):
+        """Log de nivel ERROR con color rojo"""
+        message = self._format_message(event, file_info, details, **kwargs)
+        self.logger.error(message)
+    
+    def critical(self, event: str, file_info: str = "", details: str = "", **kwargs):
+        """Log de nivel CRITICAL con color magenta"""
+        message = self._format_message(event, file_info, details, **kwargs)
+        self.logger.critical(message)
+    
+    def success(self, event: str, file_info: str = "", details: str = "", **kwargs):
+        """Log de éxito con emoji de checkmark"""
+        message = self._format_message(f"✅ {event}", file_info, details, **kwargs)
+        self.logger.info(message)
+    
+    def progress(self, event: str, file_info: str = "", details: str = "", **kwargs):
+        """Log de progreso con emoji de reloj"""
+        message = self._format_message(f"⏳ {event}", file_info, details, **kwargs)
+        self.logger.info(message)
+    
+    def start_process(self, event: str, file_info: str = "", details: str = "", **kwargs):
+        """Log de inicio de proceso con emoji de play"""
+        message = self._format_message(f"🚀 {event}", file_info, details, **kwargs)
+        self.logger.info(message)
+    
+    def finish_process(self, event: str, file_info: str = "", details: str = "", **kwargs):
+        """Log de fin de proceso con emoji de bandera"""
+        message = self._format_message(f"🏁 {event}", file_info, details, **kwargs)
+        self.logger.info(message)
+
+# Crear logger estructurado
+logger = StructuredLogger(__name__)
 
 class AudioProcessor:
     def __init__(self):
@@ -26,17 +172,17 @@ class AudioProcessor:
     def _load_whisper_model(self):
         """Carga el modelo de Whisper"""
         try:
-            logger.info(f"Cargando modelo Whisper: {self.config.WHISPER_MODEL}")
+            logger.progress("Cargando modelo Whisper", details=f"Modelo: {self.config.WHISPER_MODEL}")
             self.model = whisper.load_model(self.config.WHISPER_MODEL)
-            logger.info("Modelo Whisper cargado exitosamente")
+            logger.success("Modelo Whisper cargado", details=f"Modelo: {self.config.WHISPER_MODEL}")
         except Exception as e:
-            logger.error(f"Error cargando modelo Whisper {self.config.WHISPER_MODEL}: {e}")
-            logger.info("Intentando con modelo 'tiny' como fallback...")
+            logger.error("Error cargando modelo Whisper", details=f"Modelo: {self.config.WHISPER_MODEL}, Error: {e}")
+            logger.progress("Intentando fallback", details="Modelo: tiny")
             try:
                 self.model = whisper.load_model("tiny")
-                logger.info("Modelo Whisper 'tiny' cargado exitosamente como fallback")
+                logger.success("Modelo fallback cargado", details="Modelo: tiny")
             except Exception as e2:
-                logger.error(f"Error cargando modelo Whisper 'tiny': {e2}")
+                logger.error("Error en fallback", details=f"Error: {e2}")
                 raise
     
     def download_audio(self, audio_url: str, output_path: str) -> bool:
@@ -54,19 +200,23 @@ class AudioProcessor:
             # Crear directorio si no existe
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
-            logger.info(f"Descargando audio: {audio_url}")
+            logger.progress("Descargando audio", file_info=output_path, details=f"URL: {audio_url[:50]}...")
             response = requests.get(audio_url, stream=True, timeout=30)
             response.raise_for_status()
             
+            file_size = 0
             with open(output_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
+                    file_size += len(chunk)
             
-            logger.info(f"Audio descargado exitosamente: {output_path}")
+            logger.success("Audio descargado", file_info=output_path, 
+                          details=f"Tamaño: {file_size:,} bytes")
             return True
             
         except Exception as e:
-            logger.error(f"Error descargando audio {audio_url}: {e}")
+            logger.error("Error descargando audio", file_info=output_path, 
+                        details=f"Error: {e}")
             return False
     
     def convert_audio_format(self, input_path: str, output_path: str) -> bool:
@@ -97,14 +247,15 @@ class AudioProcessor:
                 output_path
             ]
             
-            logger.info(f"Convirtiendo audio con pre-procesamiento agresivo: {input_path}")
+            logger.progress("Convirtiendo audio", file_info=input_path, details="Pre-procesamiento agresivo")
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             
             if result.returncode == 0:
-                logger.info(f"Audio convertido exitosamente con ffmpeg agresivo: {output_path}")
+                logger.success("Audio convertido", file_info=output_path, details="Conversión agresiva exitosa")
                 return True
             else:
-                logger.error(f"Error en conversión ffmpeg agresivo: {result.stderr}")
+                logger.warning("Error en conversión agresiva", file_info=input_path, 
+                              details=f"Error: {result.stderr[:100]}...")
                 # Intentar con parámetros más básicos
                 return self._fallback_conversion(input_path, output_path)
                 
@@ -276,16 +427,16 @@ class AudioProcessor:
         """
         try:
             if not os.path.exists(audio_path):
-                logger.error(f"Archivo de audio no encontrado: {audio_path}")
+                logger.error("Archivo no encontrado", file_info=audio_path)
                 return None
             
-            logger.info(f"Transcribiendo audio: {audio_path}")
+            logger.progress("Iniciando transcripción", file_info=audio_path)
             
             # Estrategia de transcripción con múltiples fallbacks
             return self._transcribe_with_fallbacks(audio_path)
             
         except Exception as e:
-            logger.error(f"Error transcribiendo audio {audio_path}: {e}")
+            logger.error("Error en transcripción", file_info=audio_path, details=f"Error: {e}")
             return None
     
     def _validate_audio_file(self, audio_path: str) -> bool:
@@ -295,23 +446,25 @@ class AudioProcessor:
         try:
             # Verificar que el archivo existe y no está vacío
             if not os.path.exists(audio_path):
-                logger.error(f"Archivo no encontrado: {audio_path}")
+                logger.error("Archivo no encontrado", file_info=audio_path)
                 return False
             
             file_size = os.path.getsize(audio_path)
             if file_size == 0:
-                logger.error(f"Archivo vacío: {audio_path}")
+                logger.error("Archivo vacío", file_info=audio_path)
                 return False
             
             # Verificar tamaño mínimo (1KB)
             if file_size < 1024:
-                logger.warning(f"Archivo muy pequeño ({file_size} bytes): {audio_path}")
+                logger.warning("Archivo muy pequeño", file_info=audio_path, 
+                              details=f"Tamaño: {file_size} bytes")
             
             # Verificar extensión
             valid_extensions = ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.wma']
             file_ext = os.path.splitext(audio_path)[1].lower()
             if file_ext not in valid_extensions:
-                logger.warning(f"Extensión no reconocida ({file_ext}): {audio_path}")
+                logger.warning("Extensión no reconocida", file_info=audio_path, 
+                              details=f"Extensión: {file_ext}")
             
             # Intentar cargar con pydub para validar formato
             try:
@@ -319,22 +472,26 @@ class AudioProcessor:
                 duration = len(audio) / 1000.0  # duración en segundos
                 
                 if duration < 0.1:  # Menos de 100ms
-                    logger.warning(f"Audio muy corto ({duration:.2f}s): {audio_path}")
+                    logger.warning("Audio muy corto", file_info=audio_path, 
+                                  details=f"Duración: {duration:.2f}s")
                     return False
                 
                 if duration > 3600:  # Más de 1 hora
-                    logger.warning(f"Audio muy largo ({duration:.2f}s): {audio_path}")
+                    logger.warning("Audio muy largo", file_info=audio_path, 
+                                  details=f"Duración: {duration:.2f}s")
                 
-                logger.info(f"Audio validado: {duration:.2f}s, {audio.frame_rate}Hz, {audio.channels} canales")
+                logger.info("Audio validado", file_info=audio_path, 
+                           details=f"Duración: {duration:.2f}s, Frecuencia: {audio.frame_rate}Hz, Canales: {audio.channels}")
                 return True
                 
             except Exception as e:
-                logger.warning(f"Error validando audio con pydub: {e}")
+                logger.warning("Error validando con pydub", file_info=audio_path, 
+                              details=f"Error: {e}")
                 # Continuar sin validación pydub si falla
                 return True
                 
         except Exception as e:
-            logger.error(f"Error en validación de audio: {e}")
+            logger.error("Error en validación", file_info=audio_path, details=f"Error: {e}")
             return False
     
     def _transcribe_with_fallbacks(self, audio_path: str) -> Optional[str]:
@@ -343,7 +500,7 @@ class AudioProcessor:
         """
         # Validar archivo antes de procesar
         if not self._validate_audio_file(audio_path):
-            logger.error(f"Archivo de audio no válido: {audio_path}")
+            logger.error("Archivo no válido", file_info=audio_path)
             return None
         
         strategies = [
@@ -356,16 +513,19 @@ class AudioProcessor:
         
         for strategy_name, strategy_func in strategies:
             try:
-                logger.info(f"Intentando transcripción con estrategia: {strategy_name}")
+                logger.progress("Probando estrategia", file_info=audio_path, 
+                               details=f"Estrategia: {strategy_name}")
                 result = strategy_func(audio_path)
                 if result:
-                    logger.info(f"Transcripción exitosa con estrategia: {strategy_name}")
+                    logger.success("Transcripción exitosa", file_info=audio_path, 
+                                  details=f"Estrategia: {strategy_name}, Caracteres: {len(result)}")
                     return result
             except Exception as e:
-                logger.warning(f"Estrategia {strategy_name} falló: {e}")
+                logger.warning("Estrategia falló", file_info=audio_path, 
+                              details=f"Estrategia: {strategy_name}, Error: {e}")
                 continue
         
-        logger.error("Todas las estrategias de transcripción fallaron")
+        logger.error("Todas las estrategias fallaron", file_info=audio_path)
         return None
     
     def _transcribe_with_aggressive_conversion(self, audio_path: str) -> Optional[str]:
@@ -397,7 +557,8 @@ class AudioProcessor:
             )
             
             transcript = self._format_transcript(result)
-            logger.info(f"Transcripción completada: {len(transcript)} caracteres")
+            logger.success("Transcripción completada", file_info=audio_path, 
+                          details=f"Caracteres: {len(transcript)}")
             return transcript
             
         finally:
@@ -545,11 +706,13 @@ class AudioProcessor:
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(transcript)
             
-            logger.info(f"Transcripción guardada: {output_path}")
+            logger.success("Transcripción guardada", file_info=output_path, 
+                          details=f"Caracteres: {len(transcript)}")
             return True
             
         except Exception as e:
-            logger.error(f"Error guardando transcripción {output_path}: {e}")
+            logger.error("Error guardando transcripción", file_info=output_path, 
+                        details=f"Error: {e}")
             return False
     
     def process_single_call(self, call_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -610,7 +773,7 @@ class AudioProcessor:
             
             # Verificar si ya existe la transcripción
             if os.path.exists(text_path):
-                logger.info(f"Transcripción ya existe, omitiendo: {text_path}")
+                logger.info("Transcripción ya existe", file_info=text_path, details="Omitiendo procesamiento")
                 result['success'] = True
                 result['transcript_path'] = text_path
                 with open(text_path, 'r', encoding='utf-8') as f:
@@ -641,7 +804,7 @@ class AudioProcessor:
             result['success'] = True
             
         except Exception as e:
-            logger.error(f"Error procesando llamada {call_data.get('id')}: {e}")
+            logger.error("Error procesando llamada", details=f"ID: {call_data.get('id')}, Error: {e}")
             result['error'] = str(e)
         
         return result
