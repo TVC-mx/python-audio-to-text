@@ -281,50 +281,251 @@ class AudioProcessor:
             
             logger.info(f"Transcribiendo audio: {audio_path}")
             
-            # Siempre convertir el audio primero para archivos MP3 problemáticos
-            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
-                temp_path = temp_file.name
-            
-            try:
-                # Convertir audio con pre-procesamiento agresivo
-                if not self.convert_audio_format(audio_path, temp_path):
-                    logger.error(f"No se pudo convertir el archivo de audio: {audio_path}")
-                    return None
-                
-                # Verificar que el archivo convertido existe y tiene contenido
-                if not os.path.exists(temp_path) or os.path.getsize(temp_path) == 0:
-                    logger.error(f"Archivo convertido vacío o no existe: {temp_path}")
-                    return None
-                
-                # Transcribir con el archivo convertido
-                result = self.model.transcribe(
-                    temp_path,
-                    language='es',  # Español
-                    fp16=False,  # Usar fp32 para mejor compatibilidad
-                    verbose=False,
-                    # Parámetros adicionales para mejor compatibilidad
-                    condition_on_previous_text=False,
-                    initial_prompt=None
-                )
-                
-                # Formatear la transcripción para mejor legibilidad
-                transcript = self._format_transcript(result)
-                logger.info(f"Transcripción completada: {len(transcript)} caracteres")
-                
-                # Limpiar archivo temporal
-                os.unlink(temp_path)
-                return transcript
-                
-            except Exception as e:
-                logger.error(f"Error en transcripción con archivo convertido: {e}")
-                # Limpiar archivo temporal
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-                return None
+            # Estrategia de transcripción con múltiples fallbacks
+            return self._transcribe_with_fallbacks(audio_path)
             
         except Exception as e:
             logger.error(f"Error transcribiendo audio {audio_path}: {e}")
             return None
+    
+    def _validate_audio_file(self, audio_path: str) -> bool:
+        """
+        Valida que el archivo de audio sea procesable
+        """
+        try:
+            # Verificar que el archivo existe y no está vacío
+            if not os.path.exists(audio_path):
+                logger.error(f"Archivo no encontrado: {audio_path}")
+                return False
+            
+            file_size = os.path.getsize(audio_path)
+            if file_size == 0:
+                logger.error(f"Archivo vacío: {audio_path}")
+                return False
+            
+            # Verificar tamaño mínimo (1KB)
+            if file_size < 1024:
+                logger.warning(f"Archivo muy pequeño ({file_size} bytes): {audio_path}")
+            
+            # Verificar extensión
+            valid_extensions = ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.wma']
+            file_ext = os.path.splitext(audio_path)[1].lower()
+            if file_ext not in valid_extensions:
+                logger.warning(f"Extensión no reconocida ({file_ext}): {audio_path}")
+            
+            # Intentar cargar con pydub para validar formato
+            try:
+                audio = AudioSegment.from_file(audio_path)
+                duration = len(audio) / 1000.0  # duración en segundos
+                
+                if duration < 0.1:  # Menos de 100ms
+                    logger.warning(f"Audio muy corto ({duration:.2f}s): {audio_path}")
+                    return False
+                
+                if duration > 3600:  # Más de 1 hora
+                    logger.warning(f"Audio muy largo ({duration:.2f}s): {audio_path}")
+                
+                logger.info(f"Audio validado: {duration:.2f}s, {audio.frame_rate}Hz, {audio.channels} canales")
+                return True
+                
+            except Exception as e:
+                logger.warning(f"Error validando audio con pydub: {e}")
+                # Continuar sin validación pydub si falla
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error en validación de audio: {e}")
+            return False
+    
+    def _transcribe_with_fallbacks(self, audio_path: str) -> Optional[str]:
+        """
+        Intenta transcribir con múltiples estrategias de fallback
+        """
+        # Validar archivo antes de procesar
+        if not self._validate_audio_file(audio_path):
+            logger.error(f"Archivo de audio no válido: {audio_path}")
+            return None
+        
+        strategies = [
+            ("conversión_agresiva", self._transcribe_with_aggressive_conversion),
+            ("conversión_básica", self._transcribe_with_basic_conversion),
+            ("pydub", self._transcribe_with_pydub),
+            ("ultra_básica", self._transcribe_ultra_basic),
+            ("directo", self._transcribe_direct)
+        ]
+        
+        for strategy_name, strategy_func in strategies:
+            try:
+                logger.info(f"Intentando transcripción con estrategia: {strategy_name}")
+                result = strategy_func(audio_path)
+                if result:
+                    logger.info(f"Transcripción exitosa con estrategia: {strategy_name}")
+                    return result
+            except Exception as e:
+                logger.warning(f"Estrategia {strategy_name} falló: {e}")
+                continue
+        
+        logger.error("Todas las estrategias de transcripción fallaron")
+        return None
+    
+    def _transcribe_with_aggressive_conversion(self, audio_path: str) -> Optional[str]:
+        """Transcripción con conversión agresiva de ffmpeg"""
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+            temp_path = temp_file.name
+        
+        try:
+            # Convertir audio con pre-procesamiento agresivo
+            if not self.convert_audio_format(audio_path, temp_path):
+                return None
+            
+            # Verificar que el archivo convertido existe y tiene contenido
+            if not os.path.exists(temp_path) or os.path.getsize(temp_path) == 0:
+                return None
+            
+            # Transcribir con parámetros conservadores
+            result = self.model.transcribe(
+                temp_path,
+                language='es',
+                fp16=False,
+                verbose=False,
+                condition_on_previous_text=False,
+                initial_prompt=None,
+                # Parámetros adicionales para evitar errores de tensor
+                temperature=0.0,
+                best_of=1,
+                beam_size=1
+            )
+            
+            transcript = self._format_transcript(result)
+            logger.info(f"Transcripción completada: {len(transcript)} caracteres")
+            return transcript
+            
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+    
+    def _transcribe_with_basic_conversion(self, audio_path: str) -> Optional[str]:
+        """Transcripción con conversión básica de ffmpeg"""
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+            temp_path = temp_file.name
+        
+        try:
+            # Conversión básica sin filtros agresivos
+            cmd = [
+                'ffmpeg', '-i', audio_path,
+                '-acodec', 'pcm_s16le',
+                '-ac', '1',
+                '-ar', '16000',
+                '-y', temp_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            if result.returncode != 0:
+                return None
+            
+            if not os.path.exists(temp_path) or os.path.getsize(temp_path) == 0:
+                return None
+            
+            # Transcribir con parámetros mínimos
+            result = self.model.transcribe(temp_path, language='es', fp16=False)
+            return self._format_transcript(result)
+            
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+    
+    def _transcribe_direct(self, audio_path: str) -> Optional[str]:
+        """Transcripción directa sin conversión"""
+        try:
+            result = self.model.transcribe(
+                audio_path,
+                language='es',
+                fp16=False,
+                verbose=False,
+                temperature=0.0,
+                best_of=1,
+                beam_size=1
+            )
+            return self._format_transcript(result)
+        except Exception as e:
+            logger.warning(f"Transcripción directa falló: {e}")
+            return None
+    
+    def _transcribe_with_pydub(self, audio_path: str) -> Optional[str]:
+        """Transcripción usando pydub para procesamiento de audio"""
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+            temp_path = temp_file.name
+        
+        try:
+            # Cargar y procesar con pydub
+            audio = AudioSegment.from_file(audio_path)
+            
+            # Normalizar y convertir a formato estándar
+            audio = audio.set_frame_rate(16000)
+            audio = audio.set_channels(1)
+            audio = audio.set_sample_width(2)
+            
+            # Exportar como WAV
+            audio.export(temp_path, format="wav")
+            
+            if not os.path.exists(temp_path) or os.path.getsize(temp_path) == 0:
+                return None
+            
+            # Transcribir
+            result = self.model.transcribe(temp_path, language='es', fp16=False)
+            return self._format_transcript(result)
+            
+        except Exception as e:
+            logger.warning(f"Transcripción con pydub falló: {e}")
+            return None
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+    
+    def _transcribe_ultra_basic(self, audio_path: str) -> Optional[str]:
+        """Transcripción ultra básica para archivos muy problemáticos"""
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+            temp_path = temp_file.name
+        
+        try:
+            # Conversión ultra básica - solo lo esencial
+            cmd = [
+                'ffmpeg', 
+                '-i', audio_path,
+                '-ar', '16000',  # Solo sample rate
+                '-ac', '1',       # Solo mono
+                '-y', temp_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            if result.returncode != 0:
+                logger.warning(f"Conversión ultra básica falló: {result.stderr}")
+                return None
+            
+            if not os.path.exists(temp_path) or os.path.getsize(temp_path) == 0:
+                return None
+            
+            # Transcribir con parámetros ultra conservadores
+            result = self.model.transcribe(
+                temp_path, 
+                language='es', 
+                fp16=False,
+                temperature=0.0,
+                best_of=1,
+                beam_size=1,
+                patience=1.0,
+                length_penalty=1.0,
+                suppress_tokens=[-1],
+                without_timestamps=True
+            )
+            return self._format_transcript(result)
+            
+        except Exception as e:
+            logger.warning(f"Transcripción ultra básica falló: {e}")
+            return None
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
     
     def save_transcript(self, transcript: str, output_path: str) -> bool:
         """
