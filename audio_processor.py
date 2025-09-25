@@ -926,9 +926,22 @@ class AudioProcessor:
         logger.info("Verificando orden cronológico de llamadas...")
         self._log_call_order(calls_data[:5])  # Mostrar las primeras 5 para verificación
         
+        # Configurar workers según el tipo de procesamiento
+        if self.config.CPU_OPTIMIZED:
+            max_workers = min(self.config.MAX_CPU_WORKERS, len(calls_data))
+            logger.info(f"Procesamiento optimizado para CPU: {max_workers} workers")
+        else:
+            max_workers = self.config.MAX_CONCURRENT_TRANSCRIPTIONS
+            logger.info(f"Procesamiento estándar: {max_workers} workers")
+        
         results = []
         
-        with ThreadPoolExecutor(max_workers=self.config.MAX_CONCURRENT_TRANSCRIPTIONS) as executor:
+        # Procesar en chunks si está habilitado
+        if self.config.CPU_OPTIMIZED and len(calls_data) > self.config.CHUNK_SIZE:
+            logger.info(f"Procesando en chunks de {self.config.CHUNK_SIZE} llamadas")
+            return self._process_calls_in_chunks(calls_data, max_workers)
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Enviar todas las tareas manteniendo el orden
             future_to_call = {}
             for i, call_data in enumerate(calls_data):
@@ -984,3 +997,82 @@ class AudioProcessor:
         
         if len(calls_data) > 5:
             logger.info(f"  ... y {len(calls_data) - 5} llamadas más en orden cronológico")
+    
+    def _process_calls_in_chunks(self, calls_data: list, max_workers: int) -> list:
+        """
+        Procesa llamadas en chunks para optimizar el uso de memoria en CPU
+        """
+        chunk_size = self.config.CHUNK_SIZE
+        total_chunks = (len(calls_data) + chunk_size - 1) // chunk_size
+        
+        logger.info(f"Procesando {len(calls_data)} llamadas en {total_chunks} chunks de {chunk_size}")
+        
+        all_results = []
+        
+        for chunk_idx in range(0, len(calls_data), chunk_size):
+            chunk = calls_data[chunk_idx:chunk_idx + chunk_size]
+            chunk_num = (chunk_idx // chunk_size) + 1
+            
+            logger.progress(f"Procesando chunk {chunk_num}/{total_chunks}", 
+                          details=f"Llamadas: {len(chunk)}")
+            
+            # Procesar chunk con workers limitados
+            chunk_workers = min(max_workers, len(chunk))
+            chunk_results = self._process_chunk(chunk, chunk_workers)
+            all_results.extend(chunk_results)
+            
+            logger.success(f"Chunk {chunk_num} completado", 
+                         details=f"Exitosas: {sum(1 for r in chunk_results if r['success'])}/{len(chunk)}")
+        
+        logger.success("Procesamiento en chunks completado", 
+                      details=f"Total: {len(all_results)}, Exitosas: {sum(1 for r in all_results if r['success'])}")
+        return all_results
+    
+    def _process_chunk(self, chunk_data: list, max_workers: int) -> list:
+        """
+        Procesa un chunk de llamadas
+        """
+        results = []
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Enviar tareas del chunk
+            future_to_call = {}
+            for i, call_data in enumerate(chunk_data):
+                future = executor.submit(self.process_single_call, call_data)
+                future_to_call[future] = (i, call_data)
+            
+            # Crear diccionario para mantener orden
+            results_dict = {}
+            
+            # Procesar resultados conforme se completan
+            for future in as_completed(future_to_call):
+                index, call_data = future_to_call[future]
+                try:
+                    result = future.result()
+                    results_dict[index] = result
+                    
+                    if result['success']:
+                        logger.debug(f"Llamada {result['call_id']} procesada en chunk")
+                    else:
+                        logger.warning(f"Error en chunk: {result['call_id']} - {result['error']}")
+                        
+                except Exception as e:
+                    logger.error(f"Error inesperado en chunk: {call_data.get('id')} - {e}")
+                    results_dict[index] = {
+                        'call_id': call_data.get('id'),
+                        'success': False,
+                        'error': str(e)
+                    }
+            
+            # Reconstruir lista en orden
+            for i in range(len(chunk_data)):
+                if i in results_dict:
+                    results.append(results_dict[i])
+                else:
+                    results.append({
+                        'call_id': chunk_data[i].get('id'),
+                        'success': False,
+                        'error': 'Resultado no encontrado en chunk'
+                    })
+        
+        return results

@@ -22,3 +22,13 @@ class Config:
     # Configuración de procesamiento
     MAX_CONCURRENT_DOWNLOADS = int(os.getenv('MAX_CONCURRENT_DOWNLOADS', 3))
     MAX_CONCURRENT_TRANSCRIPTIONS = int(os.getenv('MAX_CONCURRENT_TRANSCRIPTIONS', 2))
+    
+    # Configuración optimizada para CPU
+    CPU_OPTIMIZED = os.getenv('CPU_OPTIMIZED', 'true').lower() == 'true'
+    MAX_CPU_WORKERS = int(os.getenv('MAX_CPU_WORKERS', 4))  # Número de workers para CPU
+    ENABLE_PARALLEL_DOWNLOADS = os.getenv('ENABLE_PARALLEL_DOWNLOADS', 'true').lower() == 'true'
+    ENABLE_PARALLEL_TRANSCRIPTIONS = os.getenv('ENABLE_PARALLEL_TRANSCRIPTIONS', 'true').lower() == 'true'
+    
+    # Configuración de memoria para CPU
+    MAX_MEMORY_USAGE = os.getenv('MAX_MEMORY_USAGE', '8G')  # Límite de memoria
+    CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', 5))  # Procesar en chunks de N llamadas

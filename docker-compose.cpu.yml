@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  audio-to-text:
+    build: .
+    container_name: audio-to-text-processor-cpu
+    volumes:
+      # Montar directorios para persistir datos
+      - ./audios:/app/audios
+      - ./textos:/app/textos
+      - ./logs:/app/logs
+      # Montar archivo de configuración si existe
+      - ./.env:/app/.env:ro
+    environment:
+      # Variables de entorno para MySQL
+      - MYSQL_HOST=${MYSQL_HOST:-localhost}
+      - MYSQL_PORT=${MYSQL_PORT:-3306}
+      - MYSQL_USER=${MYSQL_USER:-root}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-llamadas}
+      
+      # Variables para URLs de audio
+      - AUDIO_BASE_URL=${AUDIO_BASE_URL:-}
+      
+      # Configuración de Whisper optimizada para CPU
+      - WHISPER_MODEL=${WHISPER_MODEL:-tiny}
+      
+      # Configuración de procesamiento paralelo para CPU
+      - MAX_CONCURRENT_DOWNLOADS=${MAX_CONCURRENT_DOWNLOADS:-5}
+      - MAX_CONCURRENT_TRANSCRIPTIONS=${MAX_CONCURRENT_TRANSCRIPTIONS:-4}
+      
+      # Configuración optimizada para CPU
+      - CPU_OPTIMIZED=${CPU_OPTIMIZED:-true}
+      - MAX_CPU_WORKERS=${MAX_CPU_WORKERS:-4}
+      - ENABLE_PARALLEL_DOWNLOADS=${ENABLE_PARALLEL_DOWNLOADS:-true}
+      - ENABLE_PARALLEL_TRANSCRIPTIONS=${ENABLE_PARALLEL_TRANSCRIPTIONS:-true}
+      
+      # Configuración de memoria para CPU
+      - MAX_MEMORY_USAGE=${MAX_MEMORY_USAGE:-8G}
+      - CHUNK_SIZE=${CHUNK_SIZE:-5}
+    
+    # Comando por defecto (se puede sobrescribir)
+    command: python main.py --start-date 2024-01-01 --end-date 2024-01-31
+    
+    # Configuración de red (si MySQL está en otro contenedor)
+    networks:
+      - audio-network
+    
+    # Configuración de recursos optimizada para CPU
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+        reservations:
+          memory: 4G
+          cpus: '2.0'
+    
+    # Configuración de memoria compartida reducida para CPU
+    shm_size: 2gb
+
+networks:
+  audio-network:
+    driver: bridge
