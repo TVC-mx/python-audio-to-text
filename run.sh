@@ -54,7 +54,7 @@ build_command() {
     local end_date=$2
     shift 2
     
-    local cmd="docker-compose run --rm audio-to-text python main.py --start-date $start_date --end-date $end_date"
+    local cmd="docker compose run --rm audio-to-text python main.py --start-date $start_date --end-date $end_date"
     
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -91,7 +91,7 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-if ! command -v docker-compose &> /dev/null; then
+if ! command -v docker compose &> /dev/null; then
     echo -e "${RED}Error: Docker Compose no está instalado${NC}"
     exit 1
 fi
@@ -105,14 +105,14 @@ fi
 # Verificar si se debe reconstruir
 if [[ $1 == "--build" ]]; then
     echo -e "${YELLOW}Reconstruyendo imagen Docker...${NC}"
-    docker-compose build
+    docker compose build
     shift
 fi
 
 # Verificar si se deben mostrar logs
 if [[ $1 == "--logs" ]]; then
     echo -e "${YELLOW}Mostrando logs en tiempo real...${NC}"
-    docker-compose logs -f audio-to-text
+    docker compose logs -f audio-to-text
     exit 0
 fi
 
