@@ -914,41 +914,73 @@ class AudioProcessor:
     
     def process_calls_batch(self, calls_data: list) -> list:
         """
-        Procesa múltiples llamadas en paralelo
+        Procesa múltiples llamadas en paralelo manteniendo orden cronológico
         
         Args:
-            calls_data: Lista de diccionarios con datos de las llamadas
+            calls_data: Lista de diccionarios con datos de las llamadas (ya ordenada por fecha)
         
         Returns:
-            Lista de resultados del procesamiento
+            Lista de resultados del procesamiento en orden cronológico
         """
+        # Verificar que las llamadas estén ordenadas por fecha
+        logger.info("Verificando orden cronológico de llamadas...")
+        self._log_call_order(calls_data[:5])  # Mostrar las primeras 5 para verificación
+        
         results = []
         
         with ThreadPoolExecutor(max_workers=self.config.MAX_CONCURRENT_TRANSCRIPTIONS) as executor:
-            # Enviar todas las tareas
-            future_to_call = {
-                executor.submit(self.process_single_call, call_data): call_data 
-                for call_data in calls_data
-            }
+            # Enviar todas las tareas manteniendo el orden
+            future_to_call = {}
+            for i, call_data in enumerate(calls_data):
+                future = executor.submit(self.process_single_call, call_data)
+                future_to_call[future] = (i, call_data)  # Guardar índice para mantener orden
+            
+            # Crear diccionario para mantener orden de resultados
+            results_dict = {}
             
             # Procesar resultados conforme se completan
             for future in as_completed(future_to_call):
-                call_data = future_to_call[future]
+                index, call_data = future_to_call[future]
                 try:
                     result = future.result()
-                    results.append(result)
+                    results_dict[index] = result  # Guardar en posición correcta
                     
                     if result['success']:
-                        logger.info(f"Llamada {result['call_id']} procesada exitosamente")
+                        logger.success("Llamada procesada", details=f"ID: {result['call_id']}, Orden: {index + 1}/{len(calls_data)}")
                     else:
-                        logger.error(f"Error procesando llamada {result['call_id']}: {result['error']}")
+                        logger.error("Error procesando llamada", details=f"ID: {result['call_id']}, Error: {result['error']}")
                         
                 except Exception as e:
-                    logger.error(f"Error inesperado procesando llamada {call_data.get('id')}: {e}")
-                    results.append({
+                    logger.error("Error inesperado", details=f"ID: {call_data.get('id')}, Error: {e}")
+                    results_dict[index] = {
                         'call_id': call_data.get('id'),
                         'success': False,
                         'error': str(e)
+                    }
+            
+            # Reconstruir lista en orden cronológico
+            for i in range(len(calls_data)):
+                if i in results_dict:
+                    results.append(results_dict[i])
+                else:
+                    # Fallback si falta algún resultado
+                    results.append({
+                        'call_id': calls_data[i].get('id'),
+                        'success': False,
+                        'error': 'Resultado no encontrado'
                     })
         
+        logger.success("Procesamiento completado", details=f"Total: {len(results)}, Exitosas: {sum(1 for r in results if r['success'])}")
         return results
+    
+    def _log_call_order(self, calls_data: list):
+        """Registra el orden de las llamadas para verificación"""
+        logger.info("Orden cronológico de llamadas:")
+        for i, call in enumerate(calls_data[:5]):
+            fecha = call.get('fecha_llamada', 'N/A')
+            call_id = call.get('id', 'N/A')
+            user_type = call.get('user_type', 'N/A')
+            logger.info(f"  {i+1}. ID: {call_id}, Fecha: {fecha}, Tipo: {user_type}")
+        
+        if len(calls_data) > 5:
+            logger.info(f"  ... y {len(calls_data) - 5} llamadas más en orden cronológico")

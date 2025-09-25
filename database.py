@@ -62,6 +62,7 @@ class DatabaseManager:
                 cursor.execute(query, (start_date, end_date))
             else:
                 # Consulta por defecto - ajustada para tu esquema de base de datos
+                # Ordenamiento robusto por fecha y hora para mantener secuencia cronológica
                 default_query = """
                 SELECT
                     c.id AS id,
@@ -85,7 +86,10 @@ class DatabaseManager:
                 WHERE DATE(c.started_at) BETWEEN %s AND %s
                   AND ca.audio_url IS NOT NULL
                   AND ca.audio_url != ''
-                ORDER BY c.started_at ASC
+                ORDER BY 
+                    c.started_at ASC,
+                    c.id ASC,
+                    ca.user_type ASC
                 """
                 cursor.execute(default_query, (start_date, end_date))
             

@@ -158,6 +158,17 @@ def main():
         
         logger.info(f"Se encontraron {len(calls_data)} llamadas para procesar")
         
+        # Verificar orden cronológico
+        logger.info("Verificando orden cronológico de llamadas...")
+        for i, call in enumerate(calls_data[:3]):  # Mostrar las primeras 3
+            fecha = call.get('fecha_llamada', 'N/A')
+            call_id = call.get('id', 'N/A')
+            user_type = call.get('user_type', 'N/A')
+            logger.info(f"  {i+1}. ID: {call_id}, Fecha: {fecha}, Tipo: {user_type}")
+        
+        if len(calls_data) > 3:
+            logger.info(f"  ... y {len(calls_data) - 3} llamadas más en orden cronológico")
+        
         # Modo dry-run
         if args.dry_run:
             logger.info("MODO DRY-RUN: Solo mostrando qué se procesaría")
