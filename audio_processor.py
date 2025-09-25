@@ -15,6 +15,8 @@ import json
 import pickle
 import hashlib
 import threading
+import shutil
+import glob
 from functools import lru_cache
 
 from config import Config
@@ -875,12 +877,18 @@ class AudioProcessor:
             # Crear archivo de metadatos de la llamada
             self._save_call_metadata(call_data, text_dir, audio_path, text_path)
             
+            # Limpiar archivos automáticamente si está habilitado
+            self.cleanup_call_files(call_data, success=True)
+            
             result['transcript_path'] = text_path
             result['success'] = True
             
         except Exception as e:
             logger.error("Error procesando llamada", details=f"ID: {call_data.get('id')}, Error: {e}")
             result['error'] = str(e)
+            
+            # Limpiar archivos incluso en caso de error
+            self.cleanup_call_files(call_data, success=False)
         
         return result
     
@@ -1076,3 +1084,180 @@ class AudioProcessor:
                     })
         
         return results
+    
+    def cleanup_call_files(self, call_data: dict, success: bool = True):
+        """
+        Limpia archivos de una llamada después del procesamiento
+        
+        Args:
+            call_data: Datos de la llamada
+            success: Si el procesamiento fue exitoso
+        """
+        if not self.config.AUTO_CLEANUP:
+            logger.debug("Limpieza automática deshabilitada")
+            return
+        
+        try:
+            call_id = call_data.get('id')
+            fecha_llamada = call_data.get('fecha_llamada', '')
+            
+            # Extraer fecha para construir rutas
+            if fecha_llamada:
+                fecha_obj = datetime.fromisoformat(fecha_llamada.replace('Z', '+00:00'))
+                year = fecha_obj.year
+                month = f"{fecha_obj.month:02d}"
+                day = f"{fecha_obj.day:02d}"
+            else:
+                logger.warning("No se pudo extraer fecha para limpieza", call_id=call_id)
+                return
+            
+            # Construir rutas de archivos
+            audio_dir = os.path.join(self.config.AUDIO_DOWNLOAD_PATH, str(year), month, day, f"call_{call_id}")
+            text_dir = os.path.join(self.config.TEXT_OUTPUT_PATH, str(year), month, day, f"call_{call_id}")
+            
+            # Aplicar delay si está configurado
+            if self.config.CLEANUP_DELAY > 0:
+                logger.debug(f"Esperando {self.config.CLEANUP_DELAY}s antes de limpiar", call_id=call_id)
+                time.sleep(self.config.CLEANUP_DELAY)
+            
+            # Limpiar archivos de audio si está habilitado
+            if self.config.CLEANUP_AUDIO_FILES and os.path.exists(audio_dir):
+                self._cleanup_directory(audio_dir, "audio", call_id)
+            
+            # Limpiar archivos temporales si está habilitado
+            if self.config.CLEANUP_TEMP_FILES:
+                self._cleanup_temp_files(call_id)
+            
+            # Limpiar transcripciones solo si no se quiere mantener
+            if not self.config.KEEP_TRANSCRIPTS and os.path.exists(text_dir):
+                self._cleanup_directory(text_dir, "transcripción", call_id)
+            
+            logger.success("Limpieza completada", call_id=call_id, 
+                          details=f"Audio: {self.config.CLEANUP_AUDIO_FILES}, "
+                                f"Temp: {self.config.CLEANUP_TEMP_FILES}, "
+                                f"Transcripciones: {not self.config.KEEP_TRANSCRIPTS}")
+            
+        except Exception as e:
+            logger.error("Error en limpieza automática", call_id=call_id, details=f"Error: {e}")
+    
+    def _cleanup_directory(self, directory: str, file_type: str, call_id: str):
+        """
+        Limpia un directorio específico
+        """
+        try:
+            if os.path.exists(directory):
+                # Contar archivos antes de limpiar
+                files_before = len([f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))])
+                
+                # Eliminar directorio completo
+                shutil.rmtree(directory)
+                
+                logger.info(f"Directorio {file_type} eliminado", call_id=call_id, 
+                          details=f"Archivos eliminados: {files_before}, Directorio: {directory}")
+            else:
+                logger.debug(f"Directorio {file_type} no existe", call_id=call_id, details=directory)
+                
+        except Exception as e:
+            logger.error(f"Error eliminando directorio {file_type}", call_id=call_id, details=f"Error: {e}")
+    
+    def _cleanup_temp_files(self, call_id: str):
+        """
+        Limpia archivos temporales relacionados con la llamada
+        """
+        try:
+            # Buscar archivos temporales en /tmp que contengan el call_id
+            temp_patterns = [
+                f"/tmp/tmp*{call_id}*",
+                f"/tmp/*{call_id}*",
+                f"/tmp/tmp*{call_id[:10]}*"  # Buscar por los primeros 10 caracteres del ID
+            ]
+            
+            cleaned_files = 0
+            for pattern in temp_patterns:
+                temp_files = glob.glob(pattern)
+                for temp_file in temp_files:
+                    try:
+                        if os.path.isfile(temp_file):
+                            os.remove(temp_file)
+                            cleaned_files += 1
+                            logger.debug(f"Archivo temporal eliminado: {temp_file}")
+                    except Exception as e:
+                        logger.debug(f"No se pudo eliminar archivo temporal: {temp_file} - {e}")
+            
+            if cleaned_files > 0:
+                logger.info("Archivos temporales limpiados", call_id=call_id, 
+                          details=f"Archivos eliminados: {cleaned_files}")
+            else:
+                logger.debug("No se encontraron archivos temporales", call_id=call_id)
+                
+        except Exception as e:
+            logger.error("Error limpiando archivos temporales", call_id=call_id, details=f"Error: {e}")
+    
+    def get_disk_usage(self, path: str = None) -> dict:
+        """
+        Obtiene información de uso de disco
+        
+        Args:
+            path: Ruta específica a analizar (por defecto usa las rutas de configuración)
+        
+        Returns:
+            Diccionario con información de uso de disco
+        """
+        try:
+            if path is None:
+                audio_path = self.config.AUDIO_DOWNLOAD_PATH
+                text_path = self.config.TEXT_OUTPUT_PATH
+            else:
+                audio_path = text_path = path
+            
+            usage_info = {}
+            
+            # Analizar directorio de audios
+            if os.path.exists(audio_path):
+                audio_size = self._get_directory_size(audio_path)
+                usage_info['audio_size_mb'] = round(audio_size / (1024 * 1024), 2)
+                usage_info['audio_files'] = self._count_files(audio_path)
+            else:
+                usage_info['audio_size_mb'] = 0
+                usage_info['audio_files'] = 0
+            
+            # Analizar directorio de transcripciones
+            if os.path.exists(text_path):
+                text_size = self._get_directory_size(text_path)
+                usage_info['text_size_mb'] = round(text_size / (1024 * 1024), 2)
+                usage_info['text_files'] = self._count_files(text_path)
+            else:
+                usage_info['text_size_mb'] = 0
+                usage_info['text_files'] = 0
+            
+            usage_info['total_size_mb'] = usage_info['audio_size_mb'] + usage_info['text_size_mb']
+            usage_info['total_files'] = usage_info['audio_files'] + usage_info['text_files']
+            
+            return usage_info
+            
+        except Exception as e:
+            logger.error("Error obteniendo uso de disco", details=f"Error: {e}")
+            return {}
+    
+    def _get_directory_size(self, directory: str) -> int:
+        """Calcula el tamaño total de un directorio"""
+        total_size = 0
+        try:
+            for dirpath, dirnames, filenames in os.walk(directory):
+                for filename in filenames:
+                    filepath = os.path.join(dirpath, filename)
+                    if os.path.exists(filepath):
+                        total_size += os.path.getsize(filepath)
+        except Exception as e:
+            logger.debug(f"Error calculando tamaño de directorio: {e}")
+        return total_size
+    
+    def _count_files(self, directory: str) -> int:
+        """Cuenta el número de archivos en un directorio"""
+        file_count = 0
+        try:
+            for dirpath, dirnames, filenames in os.walk(directory):
+                file_count += len(filenames)
+        except Exception as e:
+            logger.debug(f"Error contando archivos: {e}")
+        return file_count

@@ -29,17 +29,25 @@ show_help() {
     echo "  --workers N     Número de workers paralelos (default: 4)"
     echo "  --chunk-size N  Tamaño de chunk para procesamiento (default: 5)"
     echo "  --model MODEL   Modelo Whisper (tiny, base, small)"
+    echo "  --cleanup       Habilitar limpieza automática de archivos"
+    echo "  --no-cleanup    Deshabilitar limpieza automática"
+    echo "  --keep-audio    Mantener archivos de audio (no limpiar)"
+    echo "  --clean-transcripts Limpiar también transcripciones"
     echo "  --dry-run       Solo mostrar qué se procesaría"
     echo "  --json          Generar reporte en formato JSON"
     echo "  --query SQL     Usar consulta SQL personalizada"
     echo "  --build         Reconstruir la imagen Docker"
     echo "  --logs          Mostrar logs en tiempo real"
+    echo "  --disk-usage    Verificar uso de disco"
     echo "  --help          Mostrar esta ayuda"
     echo ""
     echo "Ejemplos:"
     echo "  $0 2024-01-01 2024-01-31"
     echo "  $0 2024-01-01 2024-01-31 --workers 6 --chunk-size 3"
-    echo "  $0 2024-01-01 2024-01-31 --model tiny --dry-run"
+    echo "  $0 2024-01-01 2024-01-31 --model tiny --cleanup"
+    echo "  $0 2024-01-01 2024-01-31 --no-cleanup --keep-audio"
+    echo "  $0 2024-01-01 2024-01-31 --clean-transcripts --dry-run"
+    echo "  $0 --disk-usage"
     echo "  $0 2024-01-01 2024-01-31 --json"
 }
 
@@ -64,6 +72,10 @@ build_cpu_command() {
     local workers=4
     local chunk_size=5
     local model="tiny"
+    local auto_cleanup="true"
+    local cleanup_audio="true"
+    local cleanup_temp="true"
+    local keep_transcripts="true"
     local cmd="docker compose run --rm audio-to-text python main.py --start-date $start_date --end-date $end_date"
     
     # Procesar opciones
@@ -80,6 +92,22 @@ build_cpu_command() {
             --model)
                 model=$2
                 shift 2
+                ;;
+            --cleanup)
+                auto_cleanup="true"
+                shift
+                ;;
+            --no-cleanup)
+                auto_cleanup="false"
+                shift
+                ;;
+            --keep-audio)
+                cleanup_audio="false"
+                shift
+                ;;
+            --clean-transcripts)
+                keep_transcripts="false"
+                shift
                 ;;
             --dry-run)
                 cmd="$cmd --dry-run"
@@ -105,8 +133,8 @@ build_cpu_command() {
         esac
     done
     
-    # Agregar variables de entorno para CPU
-    cmd="CPU_OPTIMIZED=true MAX_CPU_WORKERS=$workers CHUNK_SIZE=$chunk_size WHISPER_MODEL=$model $cmd"
+    # Agregar variables de entorno para CPU y limpieza
+    cmd="CPU_OPTIMIZED=true MAX_CPU_WORKERS=$workers CHUNK_SIZE=$chunk_size WHISPER_MODEL=$model AUTO_CLEANUP=$auto_cleanup CLEANUP_AUDIO_FILES=$cleanup_audio CLEANUP_TEMP_FILES=$cleanup_temp KEEP_TRANSCRIPTS=$keep_transcripts $cmd"
     
     echo "$cmd"
 }
@@ -139,6 +167,13 @@ fi
 if [[ $1 == "--logs" ]]; then
     echo -e "${YELLOW}Mostrando logs en tiempo real...${NC}"
     docker compose logs -f audio-to-text
+    exit 0
+fi
+
+# Verificar si se debe mostrar uso de disco
+if [[ $1 == "--disk-usage" ]]; then
+    echo -e "${YELLOW}Verificando uso de disco...${NC}"
+    docker compose run --rm audio-to-text python check_disk_usage.py --detailed
     exit 0
 fi
 

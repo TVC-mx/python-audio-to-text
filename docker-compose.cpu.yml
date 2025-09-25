@@ -38,6 +38,13 @@ services:
       # Configuración de memoria para CPU
       - MAX_MEMORY_USAGE=${MAX_MEMORY_USAGE:-8G}
       - CHUNK_SIZE=${CHUNK_SIZE:-5}
+      
+      # Configuración de limpieza automática
+      - AUTO_CLEANUP=${AUTO_CLEANUP:-true}
+      - CLEANUP_AUDIO_FILES=${CLEANUP_AUDIO_FILES:-true}
+      - CLEANUP_TEMP_FILES=${CLEANUP_TEMP_FILES:-true}
+      - KEEP_TRANSCRIPTS=${KEEP_TRANSCRIPTS:-true}
+      - CLEANUP_DELAY=${CLEANUP_DELAY:-0}
     
     # Comando por defecto (se puede sobrescribir)
     command: python main.py --start-date 2024-01-01 --end-date 2024-01-31
