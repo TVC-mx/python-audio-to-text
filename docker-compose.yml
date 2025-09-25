@@ -24,7 +24,7 @@ services:
       - AUDIO_BASE_URL=${AUDIO_BASE_URL:-}
       
       # Configuración de Whisper
-      - WHISPER_MODEL=${WHISPER_MODEL:-tiny}
+      - WHISPER_MODEL=${WHISPER_MODEL:-large}
       
       # Configuración de procesamiento paralelo
       - MAX_CONCURRENT_DOWNLOADS=${MAX_CONCURRENT_DOWNLOADS:-3}
@@ -50,6 +50,10 @@ services:
       - CLEANUP_TEMP_FILES=${CLEANUP_TEMP_FILES:-true}
       - KEEP_TRANSCRIPTS=${KEEP_TRANSCRIPTS:-true}
       - CLEANUP_DELAY=${CLEANUP_DELAY:-0}
+      
+      # Configuración de modelo persistente
+      - PERSISTENT_MODEL=${PERSISTENT_MODEL:-true}
+      - MODEL_CACHE_ENABLED=${MODEL_CACHE_ENABLED:-true}
     
     # Comando por defecto (se puede sobrescribir)
     command: python main.py --start-date 2024-01-01 --end-date 2024-01-31

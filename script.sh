@@ -43,9 +43,9 @@ show_help() {
     echo ""
     echo "Opciones de procesamiento:"
     echo "  --mode MODE     Modo de procesamiento (cpu|gpu|cache)"
-    echo "  --workers N     Número de workers paralelos (default: 4)"
+    echo "  --workers N     Número de workers paralelos (default: auto-detectado)"
     echo "  --chunk-size N  Tamaño de chunk para procesamiento (default: 5)"
-    echo "  --model MODEL   Modelo Whisper (tiny|base|small|medium|large)"
+    echo "  --model MODEL   Modelo Whisper (tiny|base|small|medium|large, default: large)"
     echo ""
     echo "Opciones de limpieza:"
     echo "  --cleanup       Habilitar limpieza automática (default)"
@@ -93,11 +93,12 @@ build_command() {
     local end_date=$2
     shift 2
     
-    # Variables por defecto
-    local mode="cpu"
-    local workers=4
+    # Variables por defecto (con detección automática de CPUs y modelo persistente)
+    local mode="cache"
+    local detected_cpus=$(nproc 2>/dev/null || echo "4")
+    local workers=$detected_cpus
     local chunk_size=5
-    local model="tiny"
+    local model="large"
     local auto_cleanup="true"
     local cleanup_audio="true"
     local cleanup_temp="true"

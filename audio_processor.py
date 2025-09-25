@@ -877,7 +877,7 @@ class AudioProcessor:
             # Crear archivo de metadatos de la llamada
             self._save_call_metadata(call_data, text_dir, audio_path, text_path)
             
-            # Limpiar archivos automáticamente si está habilitado
+            # Limpiar archivos automáticamente (siempre, exitoso o no)
             self.cleanup_call_files(call_data, success=True)
             
             result['transcript_path'] = text_path
@@ -1088,13 +1088,15 @@ class AudioProcessor:
     def cleanup_call_files(self, call_data: dict, success: bool = True):
         """
         Limpia archivos de una llamada después del procesamiento
+        Se ejecuta siempre, exitoso o no
         
         Args:
             call_data: Datos de la llamada
-            success: Si el procesamiento fue exitoso
+            success: Si el procesamiento fue exitoso (no afecta la limpieza)
         """
+        # La limpieza se ejecuta siempre por defecto
         if not self.config.AUTO_CLEANUP:
-            logger.debug("Limpieza automática deshabilitada")
+            logger.debug("Limpieza automática deshabilitada por configuración")
             return
         
         try:

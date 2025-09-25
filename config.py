@@ -1,4 +1,5 @@
 import os
+import multiprocessing
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,7 +18,7 @@ class Config:
     TEXT_OUTPUT_PATH = '/app/textos'
     
     # Configuración de Whisper
-    WHISPER_MODEL = os.getenv('WHISPER_MODEL', 'base')  # tiny, base, small, medium, large
+    WHISPER_MODEL = os.getenv('WHISPER_MODEL', 'large')  # tiny, base, small, medium, large
     
     # Configuración de procesamiento
     MAX_CONCURRENT_DOWNLOADS = int(os.getenv('MAX_CONCURRENT_DOWNLOADS', 3))
@@ -25,7 +26,9 @@ class Config:
     
     # Configuración optimizada para CPU
     CPU_OPTIMIZED = os.getenv('CPU_OPTIMIZED', 'true').lower() == 'true'
-    MAX_CPU_WORKERS = int(os.getenv('MAX_CPU_WORKERS', 4))  # Número de workers para CPU
+    # Detectar automáticamente el número de CPUs disponibles
+    _DETECTED_CPUS = multiprocessing.cpu_count()
+    MAX_CPU_WORKERS = int(os.getenv('MAX_CPU_WORKERS', _DETECTED_CPUS))  # Número de workers para CPU
     ENABLE_PARALLEL_DOWNLOADS = os.getenv('ENABLE_PARALLEL_DOWNLOADS', 'true').lower() == 'true'
     ENABLE_PARALLEL_TRANSCRIPTIONS = os.getenv('ENABLE_PARALLEL_TRANSCRIPTIONS', 'true').lower() == 'true'
     
@@ -33,9 +36,13 @@ class Config:
     MAX_MEMORY_USAGE = os.getenv('MAX_MEMORY_USAGE', '8G')  # Límite de memoria
     CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', 5))  # Procesar en chunks de N llamadas
     
-    # Configuración de limpieza automática
+    # Configuración de limpieza automática (por defecto: limpiar todo)
     AUTO_CLEANUP = os.getenv('AUTO_CLEANUP', 'true').lower() == 'true'  # Limpiar archivos automáticamente
     CLEANUP_AUDIO_FILES = os.getenv('CLEANUP_AUDIO_FILES', 'true').lower() == 'true'  # Limpiar archivos de audio
     CLEANUP_TEMP_FILES = os.getenv('CLEANUP_TEMP_FILES', 'true').lower() == 'true'  # Limpiar archivos temporales
     KEEP_TRANSCRIPTS = os.getenv('KEEP_TRANSCRIPTS', 'true').lower() == 'true'  # Mantener transcripciones
     CLEANUP_DELAY = int(os.getenv('CLEANUP_DELAY', 0))  # Delay en segundos antes de limpiar
+    
+    # Configuración de modelo persistente
+    PERSISTENT_MODEL = os.getenv('PERSISTENT_MODEL', 'true').lower() == 'true'  # Mantener modelo en memoria
+    MODEL_CACHE_ENABLED = os.getenv('MODEL_CACHE_ENABLED', 'true').lower() == 'true'  # Habilitar cache del modelo
