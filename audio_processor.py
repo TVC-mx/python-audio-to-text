@@ -41,8 +41,9 @@ class ColoredFormatter(logging.Formatter):
         # Aplicar color al nivel
         record.levelname = f"{color}{record.levelname}{reset}"
         
-        # Formato base
-        return super().format(record)
+        # Formato base con salto de línea al final
+        formatted = super().format(record)
+        return formatted + '\n'
 
 class StructuredLogger:
     def __init__(self, name: str, level: str = "INFO"):
@@ -58,15 +59,20 @@ class StructuredLogger:
         }
         self.logger.setLevel(level_map.get(level.upper(), logging.INFO))
         
-        # Crear handler si no existe
-        if not self.logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = ColoredFormatter(
-                '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
-                datefmt='%Y-%m-%d %H:%M:%S'
-            )
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
+        # Limpiar handlers existentes para evitar duplicados
+        self.logger.handlers.clear()
+        
+        # Crear handler único
+        handler = logging.StreamHandler()
+        formatter = ColoredFormatter(
+            '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        
+        # Evitar propagación para evitar duplicados
+        self.logger.propagate = False
     
     def set_level(self, level: str):
         """Cambiar el nivel de logging dinámicamente"""
@@ -105,9 +111,12 @@ class StructuredLogger:
         parts = [f"{emoji} {event}"]
         
         if file_info:
-            # Extraer nombre de archivo limpio
-            filename = os.path.basename(file_info) if file_info else "N/A"
-            parts.append(f"📁 {filename}")
+            # Extraer nombre de archivo limpio (remover parámetros de URL)
+            clean_filename = os.path.basename(file_info.split('?')[0]) if file_info else "N/A"
+            # Truncar nombre de archivo si es muy largo
+            if len(clean_filename) > 50:
+                clean_filename = clean_filename[:47] + "..."
+            parts.append(f"📁 {clean_filename}")
         
         if details:
             parts.append(f"ℹ️  {details}")
@@ -163,6 +172,9 @@ class StructuredLogger:
         """Log de fin de proceso con emoji de bandera"""
         message = self._format_message(f"🏁 {event}", file_info, details, **kwargs)
         self.logger.info(message)
+
+# Configurar logging básico para evitar conflictos
+logging.basicConfig(level=logging.INFO, format='%(message)s', force=True)
 
 # Crear logger estructurado
 logger = StructuredLogger(__name__)
@@ -508,9 +520,11 @@ class AudioProcessor:
                 logger.warning("Archivo muy pequeño", file_info=audio_path, 
                               details=f"Tamaño: {file_size} bytes")
             
-            # Verificar extensión
+            # Verificar extensión (limpiar parámetros de URL)
             valid_extensions = ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.wma']
-            file_ext = os.path.splitext(audio_path)[1].lower()
+            # Limpiar parámetros de URL y obtener solo la extensión
+            clean_path = audio_path.split('?')[0]  # Remover parámetros de URL
+            file_ext = os.path.splitext(clean_path)[1].lower()
             if file_ext not in valid_extensions:
                 logger.warning("Extensión no reconocida", file_info=audio_path, 
                               details=f"Extensión: {file_ext}")
