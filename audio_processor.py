@@ -818,18 +818,27 @@ class AudioProcessor:
             month = f"{call_date.month:02d}"
             day = f"{call_date.day:02d}"
             
-            # Crear nombre del archivo con prefijo de user_type
+            # Obtener ID de la llamada para crear directorio único
+            call_id = call_data.get('id', 'unknown')
             user_type = call_data.get('user_type', 'unknown')
+            
+            # Crear nombre de archivo truncado y limpio
             original_filename = os.path.basename(call_data.get('audio_path', ''))
-            filename_without_ext = os.path.splitext(original_filename)[0]
-            audio_extension = os.path.splitext(original_filename)[1] or '.wav'
+            # Limpiar parámetros de URL y truncar nombre
+            clean_filename = original_filename.split('?')[0]  # Remover parámetros URL
+            filename_without_ext = os.path.splitext(clean_filename)[0]
+            audio_extension = os.path.splitext(clean_filename)[1] or '.wav'
             
-            audio_filename = f"{user_type}_{filename_without_ext}{audio_extension}"
-            text_filename = f"{user_type}_{filename_without_ext}.txt"
+            # Truncar nombre de archivo a 30 caracteres para evitar nombres muy largos
+            truncated_name = filename_without_ext[:30] if len(filename_without_ext) > 30 else filename_without_ext
             
-            # Rutas de archivos
-            audio_dir = os.path.join(self.config.AUDIO_DOWNLOAD_PATH, str(year), month, day)
-            text_dir = os.path.join(self.config.TEXT_OUTPUT_PATH, str(year), month, day)
+            # Nombres de archivo simplificados
+            audio_filename = f"{user_type}_{truncated_name}{audio_extension}"
+            text_filename = f"{user_type}_{truncated_name}.txt"
+            
+            # Rutas de archivos con estructura por llamada
+            audio_dir = os.path.join(self.config.AUDIO_DOWNLOAD_PATH, str(year), month, day, f"call_{call_id}")
+            text_dir = os.path.join(self.config.TEXT_OUTPUT_PATH, str(year), month, day, f"call_{call_id}")
             
             audio_path = os.path.join(audio_dir, audio_filename)
             text_path = os.path.join(text_dir, text_filename)
@@ -863,6 +872,9 @@ class AudioProcessor:
                 result['error'] = "Error guardando transcripción"
                 return result
             
+            # Crear archivo de metadatos de la llamada
+            self._save_call_metadata(call_data, text_dir, audio_path, text_path)
+            
             result['transcript_path'] = text_path
             result['success'] = True
             
@@ -871,6 +883,34 @@ class AudioProcessor:
             result['error'] = str(e)
         
         return result
+    
+    def _save_call_metadata(self, call_data: Dict[str, Any], text_dir: str, audio_path: str, text_path: str):
+        """
+        Guarda metadatos de la llamada en un archivo JSON
+        """
+        try:
+            metadata = {
+                'call_id': call_data.get('id'),
+                'user_type': call_data.get('user_type'),
+                'fecha_llamada': call_data.get('fecha_llamada'),
+                'audio_path': audio_path,
+                'transcript_path': text_path,
+                'processed_at': datetime.now().isoformat(),
+                'original_audio_url': call_data.get('audio_path'),
+                'agent_id': call_data.get('agent_id'),
+                'transcript_length': len(call_data.get('transcript', '')),
+                'audio_duration': call_data.get('duration', 'unknown')
+            }
+            
+            metadata_path = os.path.join(text_dir, 'call_metadata.json')
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2, ensure_ascii=False)
+            
+            logger.debug("Metadatos guardados", file_info=metadata_path, 
+                        details=f"ID: {call_data.get('id')}")
+            
+        except Exception as e:
+            logger.warning("Error guardando metadatos", details=f"Error: {e}")
     
     def process_calls_batch(self, calls_data: list) -> list:
         """
