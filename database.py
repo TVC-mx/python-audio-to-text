@@ -113,16 +113,25 @@ class DatabaseManager:
             logger.info(f"  - Usuario: {self.config.MYSQL_USER}")
             logger.info(f"  - Base de datos: {self.config.MYSQL_DATABASE}")
             
-            if not self.connection or not self.connection.is_connected():
-                logger.info("🔄 Conexión no existe o no está activa, intentando conectar...")
-                return self.connect()
+            # Limpiar conexión existente si hay problemas
+            if self.connection:
+                try:
+                    if self.connection.is_connected():
+                        # Verificar si hay consultas pendientes
+                        cursor = self.connection.cursor()
+                        cursor.execute("SELECT 1")
+                        cursor.fetchall()  # Consumir cualquier resultado pendiente
+                        cursor.close()
+                        logger.info("✅ Conexión existente verificada y limpia")
+                        return True
+                except Error as e:
+                    logger.warning(f"⚠️ Conexión existente tiene problemas: {e}")
+                    logger.info("🔄 Cerrando conexión problemática...")
+                    self.disconnect()
             
-            logger.info("✅ Conexión existe, probando con consulta simple...")
-            cursor = self.connection.cursor()
-            cursor.execute("SELECT 1")
-            cursor.close()
-            logger.info("✅ Conexión a la base de datos exitosa")
-            return True
+            logger.info("🔄 Iniciando nueva conexión...")
+            return self.connect()
+            
         except Error as e:
             logger.error(f"❌ Error probando conexión: {e}")
             logger.error(f"🔧 Tipo de error: {type(e).__name__}")
