@@ -12,6 +12,10 @@ import tempfile
 from pydub import AudioSegment
 import io
 import json
+import pickle
+import hashlib
+import threading
+from functools import lru_cache
 
 from config import Config
 
@@ -163,6 +167,51 @@ class StructuredLogger:
 # Crear logger estructurado
 logger = StructuredLogger(__name__)
 
+class ModelCache:
+    """Cache global para el modelo Whisper"""
+    
+    _instance = None
+    _lock = threading.Lock()
+    
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
+    
+    def __init__(self):
+        if not self._initialized:
+            self.model = None
+            self.model_name = None
+            self.cache_dir = "/tmp/whisper_cache"
+            self._initialized = True
+            
+            # Crear directorio de cache si no existe
+            os.makedirs(self.cache_dir, exist_ok=True)
+    
+    def get_model(self, model_name: str):
+        """Obtener modelo del cache o cargarlo si no existe"""
+        if self.model is None or self.model_name != model_name:
+            logger.progress("Cargando modelo en cache", details=f"Modelo: {model_name}")
+            self.model = whisper.load_model(model_name)
+            self.model_name = model_name
+            logger.success("Modelo cargado en cache", details=f"Modelo: {model_name}")
+        else:
+            logger.debug("Modelo ya en cache", details=f"Modelo: {model_name}")
+        
+        return self.model
+    
+    def clear_cache(self):
+        """Limpiar cache del modelo"""
+        self.model = None
+        self.model_name = None
+        logger.info("Cache del modelo limpiado")
+
+# Cache global del modelo
+model_cache = ModelCache()
+
 class AudioProcessor:
     def __init__(self):
         self.config = Config()
@@ -170,17 +219,17 @@ class AudioProcessor:
         self._load_whisper_model()
     
     def _load_whisper_model(self):
-        """Carga el modelo de Whisper"""
+        """Carga el modelo de Whisper usando cache global"""
         try:
-            logger.progress("Cargando modelo Whisper", details=f"Modelo: {self.config.WHISPER_MODEL}")
-            self.model = whisper.load_model(self.config.WHISPER_MODEL)
-            logger.success("Modelo Whisper cargado", details=f"Modelo: {self.config.WHISPER_MODEL}")
+            # Usar cache global del modelo
+            self.model = model_cache.get_model(self.config.WHISPER_MODEL)
+            logger.success("Modelo Whisper obtenido del cache", details=f"Modelo: {self.config.WHISPER_MODEL}")
         except Exception as e:
             logger.error("Error cargando modelo Whisper", details=f"Modelo: {self.config.WHISPER_MODEL}, Error: {e}")
             logger.progress("Intentando fallback", details="Modelo: tiny")
             try:
-                self.model = whisper.load_model("tiny")
-                logger.success("Modelo fallback cargado", details="Modelo: tiny")
+                self.model = model_cache.get_model("tiny")
+                logger.success("Modelo fallback cargado del cache", details="Modelo: tiny")
             except Exception as e2:
                 logger.error("Error en fallback", details=f"Error: {e2}")
                 raise
