@@ -659,38 +659,27 @@ class AudioProcessor:
     
     def _transcribe_with_fallbacks(self, audio_path: str) -> Optional[str]:
         """
-        Intenta transcribir con múltiples estrategias de fallback
+        Transcribe usando el modo seguro directamente
         """
         # Validar archivo antes de procesar
         if not self._validate_audio_file(audio_path):
             logger.error("Archivo no válido", file_info=audio_path)
             return None
         
-        strategies = [
-            ("conversión_agresiva", self._transcribe_with_aggressive_conversion),
-            ("conversión_básica", self._transcribe_with_basic_conversion),
-            ("pydub", self._transcribe_with_pydub),
-            ("ultra_básica", self._transcribe_ultra_basic),
-            ("directo", self._transcribe_direct),
-            ("modo_seguro", self._transcribe_with_safe_mode)
-        ]
-        
-        for strategy_name, strategy_func in strategies:
-            try:
-                logger.progress("Probando estrategia", file_info=audio_path, 
-                               details=f"Estrategia: {strategy_name}")
-                result = strategy_func(audio_path)
-                if result:
-                    logger.success("Transcripción exitosa", file_info=audio_path, 
-                                  details=f"Estrategia: {strategy_name}, Caracteres: {len(result)}")
-                    return result
-            except Exception as e:
-                logger.warning("Estrategia falló", file_info=audio_path, 
-                              details=f"Estrategia: {strategy_name}, Error: {e}")
-                continue
-        
-        logger.error("Todas las estrategias fallaron", file_info=audio_path)
-        return None
+        try:
+            logger.progress("Transcribiendo en modo seguro", file_info=audio_path)
+            result = self._transcribe_with_safe_mode(audio_path)
+            if result:
+                logger.success("Transcripción exitosa", file_info=audio_path, 
+                              details=f"Modo seguro, Caracteres: {len(result)}")
+                return result
+            else:
+                logger.error("Transcripción en modo seguro falló", file_info=audio_path)
+                return None
+        except Exception as e:
+            logger.error("Error en transcripción", file_info=audio_path, 
+                        details=f"Error: {e}")
+            return None
     
     def _transcribe_with_aggressive_conversion(self, audio_path: str) -> Optional[str]:
         """Transcripción con conversión agresiva de ffmpeg"""
