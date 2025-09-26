@@ -360,10 +360,12 @@ class AudioProcessor:
             
         try:
             # Información básica del modelo
+            import whisper
             model_info = {
                 "nombre": getattr(model_cache, 'model_name', 'desconocido'),
                 "tipo": type(self.model).__name__,
                 "dispositivo": getattr(self.model, 'device', 'desconocido'),
+                "versión_whisper": getattr(whisper, '__version__', 'desconocida'),
             }
             
             # Intentar obtener información adicional del modelo
@@ -410,13 +412,15 @@ class AudioProcessor:
             }
         
         try:
+            import whisper
             info = {
                 "status": "loaded",
                 "model_name": model_cache.model_name or self.config.WHISPER_MODEL,
                 "model_type": type(self.model).__name__,
                 "device": str(getattr(self.model, 'device', 'unknown')),
                 "cache_enabled": self.config.MODEL_CACHE_ENABLED,
-                "persistent": self.config.PERSISTENT_MODEL
+                "persistent": self.config.PERSISTENT_MODEL,
+                "whisper_version": getattr(whisper, '__version__', 'desconocida')
             }
             
             # Información adicional si está disponible

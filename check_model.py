@@ -40,6 +40,7 @@ def main():
             print(f"  - Nombre: {model_info.get('model_name')}")
             print(f"  - Tipo: {model_info.get('model_type')}")
             print(f"  - Dispositivo: {model_info.get('device')}")
+            print(f"  - Versión Whisper: {model_info.get('whisper_version', 'desconocida')}")
             
             if 'dimensions' in model_info:
                 print()
