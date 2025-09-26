@@ -47,7 +47,7 @@ class Config:
     CLEANUP_AUDIO_FILES = os.getenv('CLEANUP_AUDIO_FILES', 'true').lower() == 'true'  # Limpiar archivos de audio
     CLEANUP_TEMP_FILES = os.getenv('CLEANUP_TEMP_FILES', 'true').lower() == 'true'  # Limpiar archivos temporales
     KEEP_TRANSCRIPTS = os.getenv('KEEP_TRANSCRIPTS', 'true').lower() == 'true'  # Mantener transcripciones
-    CLEANUP_DELAY = int(os.getenv('CLEANUP_DELAY', 0))  # Delay en segundos antes de limpiar
+    CLEANUP_DELAY = int(os.getenv('CLEANUP_DELAY', '0'))  # Delay en segundos antes de limpiar
     
     # Configuración de modelo persistente
     PERSISTENT_MODEL = os.getenv('PERSISTENT_MODEL', 'true').lower() == 'true'  # Mantener modelo en memoria

@@ -1570,8 +1570,12 @@ class AudioProcessor:
             
             # Aplicar delay si está configurado
             if self.config.CLEANUP_DELAY > 0:
-                logger.debug(f"Esperando {self.config.CLEANUP_DELAY}s antes de limpiar", file_info=f"Call ID: {call_id}")
-                time.sleep(self.config.CLEANUP_DELAY)
+                try:
+                    delay = int(self.config.CLEANUP_DELAY)
+                    logger.debug(f"Esperando {delay}s antes de limpiar", file_info=f"Call ID: {call_id}")
+                    time.sleep(delay)
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Error en delay de limpieza: {e}, continuando sin delay")
             
             # Limpiar archivos de audio si está habilitado
             if self.config.CLEANUP_AUDIO_FILES and os.path.exists(audio_dir):
@@ -1591,7 +1595,10 @@ class AudioProcessor:
                                f"Transcripciones: {not self.config.KEEP_TRANSCRIPTS}")
             
         except Exception as e:
-            logger.error("Error en limpieza automática", file_info=f"Call ID: {call_id}", details=f"Error: {e}")
+            import traceback
+            logger.error("Error en limpieza automática", file_info=f"Call ID: {call_id}", 
+                        details=f"Error: {e}, Tipo: {type(e).__name__}")
+            logger.debug(f"Traceback completo: {traceback.format_exc()}")
     
     def _cleanup_directory(self, directory: str, file_type: str, call_id: str):
         """
