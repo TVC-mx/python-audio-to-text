@@ -1214,10 +1214,15 @@ class AudioProcessor:
         Guarda metadatos de la llamada en un archivo JSON
         """
         try:
+            # Convertir fecha a string si es datetime
+            fecha_llamada = call_data.get('fecha_llamada')
+            if isinstance(fecha_llamada, datetime):
+                fecha_llamada = fecha_llamada.isoformat()
+            
             metadata = {
                 'call_id': call_data.get('id'),
                 'user_type': call_data.get('user_type'),
-                'fecha_llamada': call_data.get('fecha_llamada'),
+                'fecha_llamada': fecha_llamada,
                 'audio_path': audio_path,
                 'transcript_path': text_path,
                 'processed_at': datetime.now().isoformat(),
@@ -1461,7 +1466,7 @@ class AudioProcessor:
                 month = f"{fecha_obj.month:02d}"
                 day = f"{fecha_obj.day:02d}"
             else:
-                logger.warning("No se pudo extraer fecha para limpieza", call_id=call_id)
+                logger.warning("No se pudo extraer fecha para limpieza", file_info=f"Call ID: {call_id}")
                 return
             
             # Construir rutas de archivos
@@ -1470,7 +1475,7 @@ class AudioProcessor:
             
             # Aplicar delay si está configurado
             if self.config.CLEANUP_DELAY > 0:
-                logger.debug(f"Esperando {self.config.CLEANUP_DELAY}s antes de limpiar", call_id=call_id)
+                logger.debug(f"Esperando {self.config.CLEANUP_DELAY}s antes de limpiar", file_info=f"Call ID: {call_id}")
                 time.sleep(self.config.CLEANUP_DELAY)
             
             # Limpiar archivos de audio si está habilitado
@@ -1485,13 +1490,13 @@ class AudioProcessor:
             if not self.config.KEEP_TRANSCRIPTS and os.path.exists(text_dir):
                 self._cleanup_directory(text_dir, "transcripción", call_id)
             
-            logger.success("Limpieza completada", call_id=call_id, 
-                          details=f"Audio: {self.config.CLEANUP_AUDIO_FILES}, "
-                                f"Temp: {self.config.CLEANUP_TEMP_FILES}, "
-                                f"Transcripciones: {not self.config.KEEP_TRANSCRIPTS}")
+            logger.success("Limpieza completada", file_info=f"Call ID: {call_id}", 
+                         details=f"Audio: {self.config.CLEANUP_AUDIO_FILES}, "
+                               f"Temp: {self.config.CLEANUP_TEMP_FILES}, "
+                               f"Transcripciones: {not self.config.KEEP_TRANSCRIPTS}")
             
         except Exception as e:
-            logger.error("Error en limpieza automática", call_id=call_id, details=f"Error: {e}")
+            logger.error("Error en limpieza automática", file_info=f"Call ID: {call_id}", details=f"Error: {e}")
     
     def _cleanup_directory(self, directory: str, file_type: str, call_id: str):
         """
@@ -1505,13 +1510,13 @@ class AudioProcessor:
                 # Eliminar directorio completo
                 shutil.rmtree(directory)
                 
-                logger.info(f"Directorio {file_type} eliminado", call_id=call_id, 
+                logger.info(f"Directorio {file_type} eliminado", file_info=f"Call ID: {call_id}", 
                           details=f"Archivos eliminados: {files_before}, Directorio: {directory}")
             else:
-                logger.debug(f"Directorio {file_type} no existe", call_id=call_id, details=directory)
+                logger.debug(f"Directorio {file_type} no existe", file_info=f"Call ID: {call_id}", details=directory)
                 
         except Exception as e:
-            logger.error(f"Error eliminando directorio {file_type}", call_id=call_id, details=f"Error: {e}")
+            logger.error(f"Error eliminando directorio {file_type}", file_info=f"Call ID: {call_id}", details=f"Error: {e}")
     
     def _cleanup_temp_files(self, call_id: str):
         """
@@ -1522,7 +1527,7 @@ class AudioProcessor:
             temp_patterns = [
                 f"/tmp/tmp*{call_id}*",
                 f"/tmp/*{call_id}*",
-                f"/tmp/tmp*{call_id[:10]}*"  # Buscar por los primeros 10 caracteres del ID
+                f"/tmp/tmp*{str(call_id)[:10]}*"  # Buscar por los primeros 10 caracteres del ID
             ]
             
             cleaned_files = 0
@@ -1538,13 +1543,13 @@ class AudioProcessor:
                         logger.debug(f"No se pudo eliminar archivo temporal: {temp_file} - {e}")
             
             if cleaned_files > 0:
-                logger.info("Archivos temporales limpiados", call_id=call_id, 
+                logger.info("Archivos temporales limpiados", file_info=f"Call ID: {call_id}", 
                           details=f"Archivos eliminados: {cleaned_files}")
             else:
-                logger.debug("No se encontraron archivos temporales", call_id=call_id)
+                logger.debug("No se encontraron archivos temporales", file_info=f"Call ID: {call_id}")
                 
         except Exception as e:
-            logger.error("Error limpiando archivos temporales", call_id=call_id, details=f"Error: {e}")
+            logger.error("Error limpiando archivos temporales", file_info=f"Call ID: {call_id}", details=f"Error: {e}")
     
     def get_disk_usage(self, path: str = None) -> dict:
         """
