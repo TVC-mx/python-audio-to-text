@@ -58,15 +58,15 @@ start_services() {
     
     # Detener servicios existentes
     echo -e "${YELLOW}🛑 Deteniendo servicios existentes...${NC}"
-    docker-compose down > /dev/null 2>&1 || true
+    docker compose down > /dev/null 2>&1 || true
     
     # Construir imágenes
     echo -e "${YELLOW}🔨 Construyendo imágenes...${NC}"
-    docker-compose build
+    docker compose build
     
     # Iniciar servicios
     echo -e "${YELLOW}🚀 Iniciando servicios...${NC}"
-    docker-compose up -d
+    docker compose up -d
     
     # Esperar a que estén listos
     echo -e "${YELLOW}⏳ Esperando a que los servicios estén listos...${NC}"
@@ -80,16 +80,16 @@ start_services() {
         echo -e "${GREEN}✅ Servicio de Whisper iniciado${NC}"
     else
         echo -e "${RED}❌ Servicio de Whisper no responde${NC}"
-        docker-compose logs whisper-service
+        docker compose logs whisper-service
         exit 1
     fi
     
     # Verificar Python
-    if docker-compose ps python-app | grep -q "Up"; then
+    if docker compose ps python-app | grep -q "Up"; then
         echo -e "${GREEN}✅ Aplicación Python iniciada${NC}"
     else
         echo -e "${RED}❌ Aplicación Python no está ejecutándose${NC}"
-        docker-compose logs python-app
+        docker compose logs python-app
         exit 1
     fi
     
@@ -102,7 +102,7 @@ stop_services() {
     echo -e "${YELLOW}🛑 Deteniendo servicios...${NC}"
     check_docker
     cd_to_docker
-    docker-compose down
+    docker compose down
     echo -e "${GREEN}✅ Servicios detenidos${NC}"
 }
 
@@ -117,7 +117,7 @@ restart_services() {
 show_status() {
     echo -e "${BLUE}📊 Estado de los servicios:${NC}"
     cd_to_docker
-    docker-compose ps
+    docker compose ps
     echo ""
     echo -e "${BLUE}📡 URLs:${NC}"
     echo "  - Whisper Service: http://localhost:8000"
@@ -132,15 +132,15 @@ show_logs() {
     case $service in
         whisper)
             echo -e "${BLUE}📋 Logs del servicio Whisper:${NC}"
-            docker-compose logs -f whisper-service
+            docker compose logs -f whisper-service
             ;;
         python)
             echo -e "${BLUE}📋 Logs de la aplicación Python:${NC}"
-            docker-compose logs -f python-app
+            docker compose logs -f python-app
             ;;
         all|*)
             echo -e "${BLUE}📋 Logs de todos los servicios:${NC}"
-            docker-compose logs -f
+            docker compose logs -f
             ;;
     esac
 }
@@ -152,13 +152,13 @@ run_app() {
     cd_to_docker
     
     # Verificar que los servicios estén ejecutándose
-    if ! docker-compose ps | grep -q "whisper-service.*Up"; then
+    if ! docker compose ps | grep -q "whisper-service.*Up"; then
         echo -e "${RED}❌ El servicio de Whisper no está ejecutándose${NC}"
         echo -e "${YELLOW}💡 Ejecuta primero: $0 start${NC}"
         exit 1
     fi
     
-    docker-compose exec python-app python main.py "$@"
+    docker compose exec python-app python main.py "$@"
 }
 
 # Función para reconstruir
@@ -166,7 +166,7 @@ build_images() {
     echo -e "${YELLOW}🔨 Reconstruyendo imágenes...${NC}"
     check_docker
     cd_to_docker
-    docker-compose build --no-cache
+    docker compose build --no-cache
     echo -e "${GREEN}✅ Imágenes reconstruidas${NC}"
 }
 
@@ -175,7 +175,7 @@ clean_all() {
     echo -e "${YELLOW}🧹 Limpiando volúmenes y contenedores...${NC}"
     check_docker
     cd_to_docker
-    docker-compose down -v
+    docker compose down -v
     docker system prune -f
     echo -e "${GREEN}✅ Limpieza completada${NC}"
 }
@@ -188,11 +188,11 @@ access_shell() {
     case $service in
         whisper)
             echo -e "${BLUE}🐚 Accediendo al shell del servicio Whisper...${NC}"
-            docker-compose exec whisper-service bash
+            docker compose exec whisper-service bash
             ;;
         python)
             echo -e "${BLUE}🐚 Accediendo al shell de la aplicación Python...${NC}"
-            docker-compose exec python-app bash
+            docker compose exec python-app bash
             ;;
         *)
             echo -e "${RED}❌ Servicio no válido. Usa: whisper o python${NC}"
@@ -215,7 +215,7 @@ check_health() {
     fi
     
     # Verificar Python
-    if docker-compose ps python-app | grep -q "Up"; then
+    if docker compose ps python-app | grep -q "Up"; then
         echo -e "${GREEN}✅ Python App: Ejecutándose${NC}"
     else
         echo -e "${RED}❌ Python App: No está ejecutándose${NC}"
