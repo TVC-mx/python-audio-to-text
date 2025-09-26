@@ -10,14 +10,15 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copiar requirements
-COPY requirements.whisper.txt requirements.txt .
+COPY requirements.whisper.txt .
 
 # Instalar dependencias de Python
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar código del servicio
 COPY whisper_service.py .
-COPY config.whisper.py config.py .
+COPY config.whisper.py .
+RUN mv config.whisper.py config.py
 
 # Crear directorio para modelos
 RUN mkdir -p /app/models
