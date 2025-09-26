@@ -1,5 +1,5 @@
 mysql-connector-python==8.2.0
-openai-whisper==20231117
+openai-whisper==20250625
 torch==2.0.1
 torchaudio==2.0.2
 requests==2.31.0

@@ -18,7 +18,7 @@ class Config:
     TEXT_OUTPUT_PATH = '/app/textos'
     
     # Configuración de Whisper
-    WHISPER_MODEL = os.getenv('WHISPER_MODEL', 'medium')  # tiny, base, small, medium, large
+    WHISPER_MODEL = os.getenv('WHISPER_MODEL', 'large')  # tiny, base, small, medium, large
     
     # Configuración de procesamiento
     MAX_CONCURRENT_DOWNLOADS = int(os.getenv('MAX_CONCURRENT_DOWNLOADS', 3))
