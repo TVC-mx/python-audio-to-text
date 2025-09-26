@@ -812,18 +812,28 @@ class AudioProcessor:
             return None
         
         try:
+            # Mostrar banner claro antes de transcribir
+            logger.info("=" * 60)
+            logger.info(f"🎯 INICIANDO TRANSCRIPCIÓN: {os.path.basename(audio_path)}")
+            logger.info("=" * 60)
+            
             logger.progress("Transcribiendo en modo seguro", file_info=audio_path)
             result = self._transcribe_with_safe_mode(audio_path)
             if result:
                 logger.success("Transcripción exitosa", file_info=audio_path, 
                               details=f"Modo seguro, Caracteres: {len(result)}")
+                logger.info("=" * 60)
+                logger.info(f"✅ FINALIZADA: {os.path.basename(audio_path)}")
+                logger.info("=" * 60 + "\n")
                 return result
             else:
                 logger.error("Transcripción en modo seguro falló", file_info=audio_path)
+                logger.info("=" * 60 + "\n")
                 return None
         except Exception as e:
             logger.error("Error en transcripción", file_info=audio_path, 
                         details=f"Error: {e}")
+            logger.info("=" * 60 + "\n")
             return None
     
     def _transcribe_with_aggressive_conversion(self, audio_path: str) -> Optional[str]:
@@ -964,12 +974,17 @@ class AudioProcessor:
             
             # Intentar transcripción con archivo convertido primero
             try:
+                # Mostrar información antes de iniciar
+                file_basename = os.path.basename(audio_path)
+                logger.info(f"🔊 Archivo: {file_basename}")
+                logger.info(f"📏 Procesando archivo completo...")
+                
                 # Intentar transcripción directa del archivo
                 result = self.model.transcribe(
                     temp_path,
                     language='es',
                     fp16=False,
-                    verbose=False,
+                    verbose=False,  # Desactivar progreso de Whisper
                     temperature=0.0,
                     best_of=1,
                     beam_size=1,
@@ -1000,7 +1015,11 @@ class AudioProcessor:
     
     def _transcribe_by_segments(self, audio_file_path: str, original_path: str) -> Optional[str]:
         """Transcribir audio dividiéndolo en segmentos más pequeños"""
-        logger.info("🔄 Transcribiendo por segmentos", file_info=original_path)
+        file_basename = os.path.basename(original_path)
+        
+        logger.info("=" * 60)
+        logger.info(f"📂 PROCESANDO POR SEGMENTOS: {file_basename}")
+        logger.info("=" * 60)
         
         try:
             # Cargar audio con pydub
@@ -1014,11 +1033,13 @@ class AudioProcessor:
                 segment = audio[i:i + segment_length_ms]
                 segments.append(segment)
             
-            logger.info(f"Audio dividido en {len(segments)} segmentos")
+            logger.info(f"📊 Audio dividido en {len(segments)} segmentos de 30s")
             
             # Transcribir cada segmento
             transcripts = []
             for i, segment in enumerate(segments):
+                logger.info(f"\n🎯 Procesando segmento {i+1}/{len(segments)} de {file_basename}")
+                
                 with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_seg:
                     segment.export(temp_seg.name, format="wav")
                     
@@ -1028,7 +1049,7 @@ class AudioProcessor:
                             temp_seg.name,
                             language='es',
                             fp16=False,
-                            verbose=False,
+                            verbose=False,  # Sin progreso detallado
                             temperature=0.0
                         )
                         
