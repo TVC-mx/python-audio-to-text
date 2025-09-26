@@ -290,6 +290,9 @@ class AudioProcessor:
             logger.info(f"  - Modelo activo: {self.config.WHISPER_MODEL}")
             logger.info(f"  - Modelo en memoria: {self.model is not None}")
             
+            # Mostrar información detallada del modelo
+            self._log_model_info()
+            
         except Exception as e:
             logger.error(f"❌ Error cargando modelo {self.config.WHISPER_MODEL}: {e}")
             logger.warning(f"⚠️ Intentando modelos de fallback...")
@@ -313,6 +316,9 @@ class AudioProcessor:
                 logger.error("❌ No se pudo cargar ningún modelo de Whisper")
                 raise Exception("No se pudo cargar ningún modelo de Whisper disponible")
             logger.info(f"  - Tipo de modelo: {type(self.model)}")
+            
+            # Agregar información detallada del modelo
+            self._log_model_info()
             
             # Verificar configuración del procesador
             logger.info("🔍 PASO 0.2: Verificando configuración del procesador...")
@@ -345,6 +351,91 @@ class AudioProcessor:
             except Exception as e2:
                 logger.error("❌ Error en fallback", details=f"Error: {e2}")
                 raise
+    
+    def _log_model_info(self):
+        """Muestra información detallada del modelo cargado"""
+        if self.model is None:
+            logger.warning("⚠️ No hay modelo cargado para mostrar información")
+            return
+            
+        try:
+            # Información básica del modelo
+            model_info = {
+                "nombre": getattr(model_cache, 'model_name', 'desconocido'),
+                "tipo": type(self.model).__name__,
+                "dispositivo": getattr(self.model, 'device', 'desconocido'),
+            }
+            
+            # Intentar obtener información adicional del modelo
+            if hasattr(self.model, 'dims'):
+                model_info["dimensiones"] = str(self.model.dims)
+            
+            if hasattr(self.model, 'encoder'):
+                model_info["encoder"] = type(self.model.encoder).__name__
+                
+            if hasattr(self.model, 'decoder'):
+                model_info["decoder"] = type(self.model.decoder).__name__
+            
+            logger.info("🔍 Información detallada del modelo Whisper:")
+            for key, value in model_info.items():
+                logger.info(f"  - {key.capitalize()}: {value}")
+                
+            # Tamaño aproximado del modelo
+            model_sizes = {
+                'tiny': '39M',
+                'base': '74M', 
+                'small': '244M',
+                'medium': '769M',
+                'large': '1550M'
+            }
+            
+            model_name = model_cache.model_name or self.config.WHISPER_MODEL
+            if model_name in model_sizes:
+                logger.info(f"  - Tamaño aproximado: {model_sizes[model_name]}")
+                
+        except Exception as e:
+            logger.debug(f"No se pudo obtener información completa del modelo: {e}")
+    
+    def get_model_info(self) -> dict:
+        """
+        Obtiene información del modelo Whisper cargado
+        
+        Returns:
+            dict: Información del modelo incluyendo nombre, tipo, dispositivo, etc.
+        """
+        if self.model is None:
+            return {
+                "status": "no_model_loaded",
+                "message": "No hay modelo cargado"
+            }
+        
+        try:
+            info = {
+                "status": "loaded",
+                "model_name": model_cache.model_name or self.config.WHISPER_MODEL,
+                "model_type": type(self.model).__name__,
+                "device": str(getattr(self.model, 'device', 'unknown')),
+                "cache_enabled": self.config.MODEL_CACHE_ENABLED,
+                "persistent": self.config.PERSISTENT_MODEL
+            }
+            
+            # Información adicional si está disponible
+            if hasattr(self.model, 'dims'):
+                info["dimensions"] = {
+                    "n_mels": getattr(self.model.dims, 'n_mels', None),
+                    "n_audio_ctx": getattr(self.model.dims, 'n_audio_ctx', None),
+                    "n_audio_state": getattr(self.model.dims, 'n_audio_state', None),
+                    "n_audio_head": getattr(self.model.dims, 'n_audio_head', None),
+                    "n_audio_layer": getattr(self.model.dims, 'n_audio_layer', None),
+                }
+                
+            return info
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Error obteniendo información del modelo: {e}"
+            }
     
     def download_audio(self, audio_url: str, output_path: str) -> bool:
         """
