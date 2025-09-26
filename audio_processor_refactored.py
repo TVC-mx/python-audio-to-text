@@ -11,10 +11,6 @@ from pydub import AudioSegment
 from config import Config
 from custom_logger import CustomLogger
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import multiprocessing
-import requests
-from tqdm import tqdm
 
 # Configurar warnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -22,7 +18,6 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 # Logger personalizado
 logger = CustomLogger()
-
 
 # Cache del modelo Whisper
 class ModelCache:
@@ -39,7 +34,7 @@ class ModelCache:
             self.model = None
             self.model_name = None
             self._initialized = True
-    
+            
     def get_model(self, model_name: str):
         """Obtener modelo del cache o cargarlo si no existe"""
         logger.info(f"🔍 Verificando cache del modelo...")
@@ -73,10 +68,8 @@ class ModelCache:
         self.model_name = None
         logger.info("Cache del modelo limpiado")
 
-
 # Cache global del modelo
 model_cache = ModelCache()
-
 
 class AudioProcessor:
     def __init__(self):
@@ -105,7 +98,7 @@ class AudioProcessor:
         except Exception as e:
             logger.error("❌ Error cargando modelo Whisper", details=f"Error: {e}")
             raise
-    
+
     def convert_audio_format(self, input_path: str, output_path: str) -> bool:
         """
         Convierte un archivo de audio a formato WAV estándar usando ffmpeg con pre-procesamiento agresivo
@@ -123,7 +116,7 @@ class AudioProcessor:
                 'ffmpeg',
                 '-i', input_path,
                 # Filtros de audio para normalización y limpieza
-                '-af', 'aresample=resampler=soxr:precision=28:cheby=1,volume=1.0,highpass=f=80,lowpass=f=8000',
+                '-af', 'aresample=resampler=soxr,volume=1.0,highpass=f=80,lowpass=f=8000',
                 # Parámetros de salida específicos para Whisper
                 '-acodec', 'pcm_s16le',  # Códec PCM 16-bit little-endian
                 '-ac', '1',              # Mono (1 canal)
@@ -141,45 +134,15 @@ class AudioProcessor:
                 logger.success("Audio convertido", file_info=output_path, details="Conversión exitosa")
                 return True
             else:
-                logger.warning("Error en conversión agresiva", file_info=input_path, 
+                logger.error("Error en conversión", file_info=input_path, 
                             details=f"Error: {result.stderr[:100]}...")
-                logger.info("🔄 Intentando conversión básica...")
-                return self._fallback_conversion(input_path, output_path)
+                return False
                 
         except subprocess.TimeoutExpired:
             logger.error(f"Timeout en conversión ffmpeg: {input_path}")
             return False
         except Exception as e:
             logger.error(f"Error convirtiendo audio: {e}")
-            return self._fallback_conversion(input_path, output_path)
-
-    def _fallback_conversion(self, input_path: str, output_path: str) -> bool:
-        """
-        Conversión de fallback con parámetros más básicos
-        """
-        try:
-            logger.info("Intentando conversión de fallback...")
-            cmd = [
-                'ffmpeg',
-                '-i', input_path,
-                '-acodec', 'pcm_s16le',
-                '-ac', '1',
-                '-ar', '16000',
-                '-y', output_path
-            ]
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-            
-            if result.returncode == 0:
-                logger.success("Conversión de fallback exitosa", file_info=output_path)
-                return True
-            else:
-                logger.error("Conversión de fallback falló", file_info=input_path, 
-                            details=f"Error: {result.stderr[:100]}...")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Error en conversión de fallback: {e}")
             return False
 
     def transcribe_audio(self, audio_path: str) -> Optional[str]:
@@ -224,48 +187,22 @@ class AudioProcessor:
             # Transcribir con Whisper
             logger.progress("Transcribiendo con Whisper", file_info=audio_path)
             
-            try:
-                result = self.model.transcribe(
-                    temp_path,
-                    language='es',
-                    fp16=False,
-                    verbose=False,
-                    temperature=0.0,
-                    best_of=1,
-                    beam_size=1,
-                    patience=1.0,
-                    suppress_tokens=[-1],
-                    without_timestamps=False,  # Para obtener segmentos
-                    condition_on_previous_text=True,  # Mejor contexto
-                    no_speech_threshold=0.6,
-                    compression_ratio_threshold=2.4,
-                    initial_prompt=initial_prompt
-                )
-            except RuntimeError as rt_error:
-                error_msg = str(rt_error).lower()
-                if any(word in error_msg for word in ["tensor", "reshape", "dimension", "size", "batch"]):
-                    logger.warning(f"⚠️ Error de tensor detectado: {rt_error}")
-                    logger.info("🔄 Intentando con parámetros más conservadores...")
-                    
-                    # Intentar con parámetros más conservadores
-                    result = self.model.transcribe(
-                        temp_path,
-                        language='es',
-                        fp16=False,
-                        verbose=False,
-                        temperature=0.0,
-                        best_of=1,
-                        beam_size=1,
-                        patience=1.0,
-                        suppress_tokens=[-1],
-                        without_timestamps=True,  # Sin timestamps para evitar problemas
-                        condition_on_previous_text=False,  # Sin contexto previo
-                        no_speech_threshold=0.6,
-                        compression_ratio_threshold=2.4,
-                        initial_prompt=""  # Sin prompt inicial
-                    )
-                else:
-                    raise
+            result = self.model.transcribe(
+                temp_path,
+                language='es',
+                fp16=False,
+                verbose=False,
+                temperature=0.0,
+                best_of=1,
+                beam_size=1,
+                patience=1.0,
+                suppress_tokens=[-1],
+                without_timestamps=False,  # Para obtener segmentos
+                condition_on_previous_text=True,  # Mejor contexto
+                no_speech_threshold=0.6,
+                compression_ratio_threshold=2.4,
+                initial_prompt=initial_prompt
+            )
             
             # Formatear transcripción
             transcript = self._format_transcript(result)
@@ -288,7 +225,7 @@ class AudioProcessor:
             # Limpiar archivo temporal
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
-    
+
     def _format_transcript(self, result) -> str:
         """
         Formatea la transcripción para mejor legibilidad
@@ -380,7 +317,7 @@ class AudioProcessor:
             logger.error(f"Error formateando transcripción: {e}")
             # Fallback al texto simple
             return result.get("text", "").strip()
-    
+
     def _apply_basic_formatting(self, text: str) -> str:
         """
         Aplica formato básico al texto: puntuación, mayúsculas, etc.
@@ -437,7 +374,7 @@ class AudioProcessor:
                 sentence = sentence_endings[i].strip()
                 ending = sentence_endings[i + 1] if i + 1 < len(sentence_endings) else ''
                 
-            if sentence:
+                if sentence:
                     # Capitalizar primera letra de cada oración
                     if not sentence[0].isupper():
                         sentence = sentence[0].upper() + sentence[1:] if len(sentence) > 1 else sentence.upper()
@@ -466,7 +403,7 @@ class AudioProcessor:
         text = re.sub(r'([.,!?;:])([A-Za-zÀ-ÿ])', r'\1 \2', text)
         
         return text.strip()
-    
+
     def _format_time(self, seconds: float) -> str:
         """
         Convierte segundos a formato MM:SS
@@ -480,7 +417,7 @@ class AudioProcessor:
         minutes = int(seconds // 60)
         seconds = int(seconds % 60)
         return f"{minutes:02d}:{seconds:02d}"
-    
+
     def _format_simple_text(self, text: str) -> str:
         """
         Formatea texto simple para mejor legibilidad
@@ -557,7 +494,7 @@ class AudioProcessor:
         formatted_lines.append("=" * 60)
         
         return "\n".join(formatted_lines)
-    
+
     def save_transcript(self, transcript: str, output_path: str) -> bool:
         """
         Guarda la transcripción en un archivo de texto
@@ -583,7 +520,7 @@ class AudioProcessor:
             logger.error("Error guardando transcripción", file_info=output_path, 
                         details=f"Error: {e}")
             return False
-    
+
     def get_model_info(self) -> dict:
         """
         Obtiene información sobre el modelo cargado
@@ -627,256 +564,3 @@ class AudioProcessor:
                 "status": "error",
                 "message": f"Error obteniendo información: {str(e)}"
             }
-
-    def download_audio_file(self, audio_url: str, local_path: str) -> bool:
-        """
-        Descarga un archivo de audio desde una URL
-        
-        Args:
-            audio_url: URL del archivo de audio
-            local_path: Ruta local donde guardar el archivo
-        
-        Returns:
-            True si se descargó exitosamente, False en caso contrario
-        """
-        try:
-            # Crear directorio si no existe
-            os.makedirs(os.path.dirname(local_path), exist_ok=True)
-            
-            # Descargar archivo
-            logger.progress("Descargando audio", file_info=audio_url)
-            response = requests.get(audio_url, stream=True, timeout=30)
-            response.raise_for_status()
-            
-            # Guardar archivo
-            with open(local_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            
-            logger.success("Audio descargado", file_info=local_path)
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error descargando audio: {e}", file_info=audio_url)
-            return False
-    
-    def process_single_call(self, call_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Procesa una sola llamada: descarga y transcribe
-        
-        Args:
-            call_data: Diccionario con información de la llamada
-        
-        Returns:
-            Diccionario con resultado del procesamiento
-        """
-        call_id = call_data.get('id', 'unknown')
-        audio_path = call_data.get('audio_path', '')
-        
-        result = {
-            'call_id': call_id,
-            'success': False,
-            'transcript_path': None,
-            'error': None
-        }
-        
-        try:
-            # Construir rutas
-            audio_filename = os.path.basename(audio_path)
-            
-            # Manejar fecha de llamada
-            fecha_llamada = call_data.get('fecha_llamada')
-            if isinstance(fecha_llamada, str):
-                fecha_llamada = datetime.strptime(fecha_llamada, '%Y-%m-%d')
-            elif not fecha_llamada:
-                fecha_llamada = datetime.now()
-            
-            fecha_str = fecha_llamada.strftime('%Y/%m/%d')
-            
-            # Rutas locales
-            local_audio_path = os.path.join(
-                self.config.AUDIO_DOWNLOAD_PATH,
-                fecha_str,
-                audio_filename
-            )
-            
-            transcript_path = os.path.join(
-                self.config.TEXT_OUTPUT_PATH,
-                fecha_str,
-                f"{os.path.splitext(audio_filename)[0]}.txt"
-            )
-            
-            # Descargar audio si no existe
-            if not os.path.exists(local_audio_path):
-                audio_url = f"{self.config.AUDIO_BASE_URL}/{audio_path}"
-                if not self.download_audio_file(audio_url, local_audio_path):
-                    result['error'] = "Error descargando audio"
-                    return result
-            
-            # Transcribir audio
-            transcript = self.transcribe_audio(local_audio_path)
-            if transcript:
-                # Guardar transcripción
-                if self.save_transcript(transcript, transcript_path):
-                    result['success'] = True
-                    result['transcript_path'] = transcript_path
-                else:
-                    result['error'] = "Error guardando transcripción"
-            else:
-                result['error'] = "Error en transcripción"
-            
-            # Limpiar archivos si está configurado
-            if self.config.AUTO_CLEANUP and self.config.CLEANUP_AUDIO_FILES:
-                try:
-                    os.remove(local_audio_path)
-                    logger.debug(f"Archivo de audio eliminado: {local_audio_path}")
-                except:
-                    pass
-            
-            return result
-            
-        except Exception as e:
-            result['error'] = str(e)
-            logger.error(f"Error procesando llamada {call_id}: {e}")
-        return result
-    
-    def process_calls_batch(self, calls_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Procesa un lote de llamadas, con opción de procesamiento paralelo
-        
-        Args:
-            calls_data: Lista de diccionarios con información de llamadas
-        
-        Returns:
-            Lista de resultados del procesamiento
-        """
-        total_calls = len(calls_data)
-        logger.info(f"🎯 Iniciando procesamiento de {total_calls} llamadas")
-        
-        # Determinar si usar procesamiento paralelo
-        use_parallel = (
-            self.config.ENABLE_PARALLEL_TRANSCRIPTIONS and 
-            total_calls > 1 and
-            self.config.MAX_CPU_WORKERS > 1
-        )
-        
-        if use_parallel:
-            return self._process_calls_parallel(calls_data)
-        else:
-            return self._process_calls_sequential(calls_data)
-
-    def _process_calls_sequential(self, calls_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Procesa llamadas de forma secuencial
-        """
-        results = []
-        
-        with tqdm(total=len(calls_data), desc="Procesando llamadas", unit="llamada") as pbar:
-            for i, call_data in enumerate(calls_data):
-                logger.info(f"📞 Procesando llamada {i+1}/{len(calls_data)}")
-                result = self.process_single_call(call_data)
-                results.append(result)
-                
-                # Actualizar barra de progreso
-                pbar.update(1)
-                
-                # Log del resultado
-                if result['success']:
-                    logger.success(f"✅ Llamada {result['call_id']} procesada exitosamente")
-                else:
-                    logger.error(f"❌ Error en llamada {result['call_id']}: {result['error']}")
-        
-        return results
-    
-    def _process_calls_parallel(self, calls_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Procesa llamadas en paralelo usando multiprocessing
-        
-        NOTA: Cada proceso cargará su propia instancia del modelo Whisper
-        """
-        max_workers = min(self.config.MAX_CPU_WORKERS, len(calls_data))
-        logger.info(f"🚀 Procesamiento paralelo con {max_workers} workers")
-        logger.warning("⚠️ Cada worker cargará su propia copia del modelo en memoria")
-        
-        results = []
-        
-        # Usar ThreadPoolExecutor para evitar problemas con el modelo compartido
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Crear futures para cada llamada
-            future_to_call = {
-                executor.submit(self.process_single_call, call_data): call_data
-                for call_data in calls_data
-            }
-            
-            # Procesar resultados conforme se completan
-            with tqdm(total=len(calls_data), desc="Procesando llamadas", unit="llamada") as pbar:
-                for future in as_completed(future_to_call):
-                    call_data = future_to_call[future]
-                    try:
-                        result = future.result()
-                        results.append(result)
-                        
-                        # Log del resultado
-                        if result['success']:
-                            logger.success(f"✅ Llamada {result['call_id']} procesada")
-                        else:
-                            logger.error(f"❌ Error en llamada {result['call_id']}: {result['error']}")
-                        
-                    except Exception as e:
-                        logger.error(f"❌ Excepción procesando llamada: {e}")
-                        results.append({
-                            'call_id': call_data.get('id', 'unknown'),
-                            'success': False,
-                            'transcript_path': None,
-                            'error': str(e)
-                        })
-                    
-                    finally:
-                        pbar.update(1)
-        
-        return results
-    
-    def process_calls_parallel_multiprocessing(self, calls_data: List[Dict[str, Any]], 
-                                             max_workers: Optional[int] = None) -> List[Dict[str, Any]]:
-        """
-        Procesa múltiples llamadas en paralelo usando multiprocessing puro
-        
-        Args:
-            calls_data: Lista de llamadas a procesar
-            max_workers: Número máximo de procesos paralelos (por defecto usa config)
-        
-        Returns:
-            Lista de resultados
-        
-        NOTA: Este método es más eficiente en memoria pero cada proceso
-        debe cargar su propia copia del modelo Whisper
-        """
-        if max_workers is None:
-            max_workers = self.config.MAX_CPU_WORKERS
-        
-        max_workers = min(max_workers, len(calls_data), multiprocessing.cpu_count())
-        
-        logger.info(f"🚀 Iniciando procesamiento con {max_workers} procesos")
-        logger.info(f"💾 Cada proceso cargará ~2-4GB de RAM para el modelo")
-        
-        # Crear pool de procesos
-        with multiprocessing.Pool(processes=max_workers) as pool:
-            # Mapear función a los datos
-            results = list(tqdm(
-                pool.imap(process_call_worker, calls_data),
-                total=len(calls_data),
-                desc="Procesando audios",
-                unit="archivo"
-            ))
-        
-        return results
-
-
-# Función worker para multiprocessing (debe estar fuera de la clase)
-def process_call_worker(call_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Worker function para procesar una llamada en un proceso separado
-    """
-    # Crear nueva instancia del procesador (con su propio modelo)
-    processor = AudioProcessor()
-    return processor.process_single_call(call_data)
