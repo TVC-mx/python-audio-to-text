@@ -543,25 +543,65 @@ class AudioProcessor:
             if "segments" in result and result["segments"]:
                 formatted_lines = []
                 formatted_lines.append("=" * 60)
-                formatted_lines.append("TRANSCRIPCIÓN DE LLAMADA")
+                formatted_lines.append("TRANSCRIPCIÓN DE LLAMADA CON TIMESTAMPS")
                 formatted_lines.append("=" * 60)
                 formatted_lines.append("")
                 
-                for i, segment in enumerate(result["segments"], 1):
-                    start_time = self._format_time(segment["start"])
-                    end_time = self._format_time(segment["end"])
+                current_speaker_text = []
+                current_start_time = None
+                accumulated_duration = 0
+                
+                for i, segment in enumerate(result["segments"]):
+                    start_time = segment["start"]
+                    end_time = segment["end"]
                     text = segment["text"].strip()
                     
-                    # Agregar timestamp y texto
-                    formatted_lines.append(f"[{start_time} - {end_time}] {text}")
+                    if not text:
+                        continue
                     
-                    # Agregar línea en blanco cada 3 segmentos para mejor legibilidad
-                    if i % 3 == 0:
-                        formatted_lines.append("")
+                    # Si es el primer segmento o han pasado más de 30 segundos
+                    if current_start_time is None:
+                        current_start_time = start_time
+                    
+                    current_speaker_text.append(text)
+                    accumulated_duration = end_time - current_start_time
+                    
+                    # Agrupar segmentos cada 30 segundos o cuando hay una pausa significativa
+                    next_segment_gap = 0
+                    if i + 1 < len(result["segments"]):
+                        next_segment_gap = result["segments"][i + 1]["start"] - end_time
+                    
+                    should_break = (
+                        accumulated_duration > 30 or  # Más de 30 segundos
+                        next_segment_gap > 2 or  # Pausa de más de 2 segundos
+                        i == len(result["segments"]) - 1  # Último segmento
+                    )
+                    
+                    if should_break and current_speaker_text:
+                        # Formatear el bloque de texto
+                        combined_text = ' '.join(current_speaker_text)
+                        combined_text = self._apply_basic_formatting(combined_text)
+                        
+                        # Mostrar timestamp del bloque
+                        start_formatted = self._format_time(current_start_time)
+                        end_formatted = self._format_time(end_time)
+                        
+                        formatted_lines.append(f"[{start_formatted} - {end_formatted}]")
+                        formatted_lines.append(combined_text)
+                        formatted_lines.append("")  # Línea en blanco
+                        
+                        # Resetear para el siguiente bloque
+                        current_speaker_text = []
+                        current_start_time = None
+                        accumulated_duration = 0
                 
-                formatted_lines.append("")
+                # Estadísticas
                 formatted_lines.append("=" * 60)
-                formatted_lines.append(f"FIN DE TRANSCRIPCIÓN - {len(full_text)} caracteres")
+                formatted_lines.append("RESUMEN:")
+                formatted_lines.append(f"- Total de caracteres: {len(full_text):,}")
+                formatted_lines.append(f"- Total de palabras: {len(full_text.split()):,}")
+                formatted_lines.append(f"- Duración total: {self._format_time(result['segments'][-1]['end'])}")
+                formatted_lines.append(f"- Segmentos procesados: {len(result['segments'])}")
                 formatted_lines.append("=" * 60)
                 
                 return "\n".join(formatted_lines)
@@ -589,39 +629,74 @@ class AudioProcessor:
         # Limpiar espacios múltiples
         text = re.sub(r'\s+', ' ', text).strip()
         
-        # Asegurar que empiece con mayúscula
-        if text:
-            text = text[0].upper() + text[1:]
+        # Si el texto está vacío, retornar
+        if not text:
+            return text
         
-        # Corregir puntuación básica
-        # Agregar puntos después de pausas largas (aproximación)
-        text = re.sub(r'(\w)\s+([A-Z])', r'\1. \2', text)
+        # Asegurar que empiece con mayúscula
+        text = text[0].upper() + text[1:] if len(text) > 1 else text.upper()
+        
+        # Palabras comunes que indican preguntas en español
+        question_words = r'\b(qué|quién|quiénes|cuál|cuáles|cómo|cuándo|dónde|por qué|para qué|cuánto|cuánta|cuántos|cuántas)\b'
+        
+        # Detectar y marcar posibles preguntas
+        # Buscar frases que empiecen con palabras interrogativas
+        text = re.sub(r'(' + question_words + r'[^.!?]*)', r'\1?', text, flags=re.IGNORECASE)
+        
+        # Corregir casos donde ya había signos de interrogación
+        text = re.sub(r'\?\s*\?', '?', text)
+        
+        # Mejorar detección de oraciones
+        # Agregar puntos cuando hay una pausa clara (letra minúscula seguida de mayúscula)
+        text = re.sub(r'([a-z])\s+([A-Z])', r'\1. \2', text)
         
         # Corregir espacios alrededor de puntuación
         text = re.sub(r'\s+([.,!?;:])', r'\1', text)
         text = re.sub(r'([.,!?;:])\s*', r'\1 ', text)
         
-        # Asegurar mayúsculas después de puntos
-        sentences = text.split('. ')
-        formatted_sentences = []
-        for sentence in sentences:
-            if sentence:
-                sentence = sentence.strip()
-                if sentence and not sentence[0].isupper():
-                    sentence = sentence[0].upper() + sentence[1:]
-                formatted_sentences.append(sentence)
+        # Manejar palabras comunes que indican continuación
+        continuations = ['y', 'o', 'pero', 'sin embargo', 'además', 'entonces', 'después']
+        for word in continuations:
+            # Evitar mayúsculas después de coma si es una continuación
+            text = re.sub(r',\s+' + word.capitalize() + r'\b', f', {word}', text)
         
-        text = '. '.join(formatted_sentences)
+        # Dividir en oraciones para procesamiento
+        # Usar una expresión regular más compleja para detectar finales de oración
+        sentence_endings = re.split(r'([.!?]+\s*)', text)
         
-        # Asegurar que termina con punto
-        if text and not text.endswith(('.', '!', '?')):
-            text += '.'
+        formatted_parts = []
+        for i in range(0, len(sentence_endings), 2):
+            if i < len(sentence_endings):
+                sentence = sentence_endings[i].strip()
+                ending = sentence_endings[i + 1] if i + 1 < len(sentence_endings) else ''
+                
+                if sentence:
+                    # Capitalizar primera letra de cada oración
+                    if not sentence[0].isupper():
+                        sentence = sentence[0].upper() + sentence[1:] if len(sentence) > 1 else sentence.upper()
+                    
+                    # Añadir el final de oración
+                    formatted_parts.append(sentence + ending)
         
-        # Corregir dobles espacios
+        text = ''.join(formatted_parts)
+        
+        # Asegurar que termina con punto si no tiene puntuación final
+        if text and not text.rstrip().endswith(('.', '!', '?')):
+            text = text.rstrip() + '.'
+        
+        # Limpiar espacios múltiples finales
         text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r'\s+([.!?])', r'\1', text)
         
         # Arreglar puntuación duplicada
-        text = re.sub(r'([.,!?;:])+', r'\1', text)
+        text = re.sub(r'([.,!?;:])\1+', r'\1', text)
+        
+        # Eliminar espacios antes de comas y puntos
+        text = re.sub(r'\s+,', ',', text)
+        text = re.sub(r'\s+\.', '.', text)
+        
+        # Asegurar espacio después de puntuación (excepto al final)
+        text = re.sub(r'([.,!?;:])([A-Za-zÀ-ÿ])', r'\1 \2', text)
         
         return text.strip()
     
@@ -659,36 +734,59 @@ class AudioProcessor:
         # Dividir el texto en oraciones para mejor formato
         import re
         
-        # Dividir por puntos finales de oración
+        # Dividir por puntos finales de oración manteniendo el signo de puntuación
         sentences = re.split(r'(?<=[.!?])\s+', text)
         
         current_paragraph = []
         char_count = 0
+        word_count = 0
         
         for sentence in sentences:
             if sentence.strip():
                 current_paragraph.append(sentence.strip())
                 char_count += len(sentence)
+                word_count += len(sentence.split())
                 
-                # Crear párrafo cada 200 caracteres aproximadamente
-                if char_count > 200:
+                # Crear párrafo basado en múltiples criterios:
+                # - Más de 300 caracteres
+                # - Más de 50 palabras
+                # - Si la oración termina con signo de exclamación o interrogación y ya hay contenido
+                should_break = (
+                    char_count > 300 or 
+                    word_count > 50 or
+                    (len(current_paragraph) > 2 and sentence.rstrip().endswith(('!', '?')))
+                )
+                
+                if should_break:
                     # Las oraciones ya tienen su puntuación
                     paragraph_text = ' '.join(current_paragraph)
                     
+                    # Aplicar sangría si es el inicio de un párrafo (excepto el primero)
+                    if formatted_lines and formatted_lines[-1] == "":
+                        paragraph_text = "    " + paragraph_text
+                    
                     formatted_lines.append(paragraph_text)
-                    formatted_lines.append("")  # Línea en blanco
+                    formatted_lines.append("")  # Línea en blanco entre párrafos
                     
                     current_paragraph = []
                     char_count = 0
+                    word_count = 0
         
         # Agregar el último párrafo si queda algo
         if current_paragraph:
             paragraph_text = ' '.join(current_paragraph)
+            # Sangría para el último párrafo si no es el primero
+            if formatted_lines and formatted_lines[-1] == "":
+                paragraph_text = "    " + paragraph_text
             formatted_lines.append(paragraph_text)
             formatted_lines.append("")
         
+        # Información adicional
         formatted_lines.append("=" * 60)
-        formatted_lines.append(f"FIN DE TRANSCRIPCIÓN - {len(text)} caracteres")
+        formatted_lines.append(f"RESUMEN:")
+        formatted_lines.append(f"- Total de caracteres: {len(text):,}")
+        formatted_lines.append(f"- Total de palabras: {len(text.split()):,}")
+        formatted_lines.append(f"- Oraciones aproximadas: {len(sentences)}")
         formatted_lines.append("=" * 60)
         
         return "\n".join(formatted_lines)
@@ -851,13 +949,19 @@ class AudioProcessor:
                 return None
             
             # Transcribir con parámetros conservadores
+            # Prompt inicial para mejorar formato
+            initial_prompt = (
+                "Transcripción de conversación telefónica con puntuación completa, "
+                "incluyendo puntos, comas, signos de interrogación y exclamación."
+            )
+            
             result = self.model.transcribe(
                 temp_path,
                 language='es',
                 fp16=False,
                 verbose=False,
-                condition_on_previous_text=False,
-                initial_prompt=None,
+                condition_on_previous_text=True,  # Cambiar a True para mejor contexto
+                initial_prompt=initial_prompt,  # Usar prompt
                 # Parámetros adicionales para evitar errores de tensor
                 temperature=0.0,
                 best_of=1,
@@ -918,6 +1022,11 @@ class AudioProcessor:
     def _transcribe_direct(self, audio_path: str) -> Optional[str]:
         """Transcripción directa sin conversión"""
         try:
+            # Prompt para transcripción directa
+            direct_prompt = (
+                "Esta es una llamada telefónica transcrita con puntuación apropiada."
+            )
+            
             result = self.model.transcribe(
                 audio_path,
                 language='es',
@@ -929,11 +1038,11 @@ class AudioProcessor:
                 patience=1.0,
                 length_penalty=1.0,
                 suppress_tokens=[-1],
-                without_timestamps=True,
-                condition_on_previous_text=False,
+                without_timestamps=False,  # Para obtener segmentos
+                condition_on_previous_text=True,  # Mejor contexto
                 compression_ratio_threshold=2.4,
                 no_speech_threshold=0.6,
-                initial_prompt=""
+                initial_prompt=direct_prompt
             )
             return self._format_transcript(result)
         except RuntimeError as e:
@@ -972,36 +1081,68 @@ class AudioProcessor:
                 logger.warning(f"Conversión en modo seguro falló: {result.stderr}")
                 return None
             
+            # Verificar que el archivo convertido tiene contenido
+            file_size = os.path.getsize(temp_path)
+            if file_size == 0:
+                logger.warning("⚠️ Archivo de audio convertido está vacío")
+                return None
+            
             # Intentar transcripción con archivo convertido primero
             try:
                 # Mostrar información antes de iniciar
                 file_basename = os.path.basename(audio_path)
                 logger.info(f"🔊 Archivo: {file_basename}")
-                logger.info(f"📏 Procesando archivo completo...")
+                logger.info(f"📏 Procesando archivo completo (tamaño: {file_size:,} bytes)...")
                 
-                # Intentar transcripción directa del archivo
-                result = self.model.transcribe(
-                    temp_path,
-                    language='es',
-                    fp16=False,
-                    verbose=False,  # Desactivar progreso de Whisper
-                    temperature=0.0,
-                    best_of=1,
-                    beam_size=1,
-                    patience=1.0,
-                    suppress_tokens=[-1],
-                    without_timestamps=True,
-                    condition_on_previous_text=False
-                )
-                
-                transcript = self._format_transcript(result)
-                logger.success("Transcripción en modo seguro exitosa", file_info=audio_path)
-                return transcript
+                # Intentar transcripción directa del archivo con manejo mejorado
+                try:
+                    # Prompt para mejorar formato y puntuación
+                    initial_prompt = (
+                        "Esta es una conversación telefónica transcrita con puntuación completa, "
+                        "incluyendo puntos, comas, signos de interrogación y exclamación donde corresponda. "
+                        "La transcripción está bien formateada con oraciones completas."
+                    )
+                    
+                    result = self.model.transcribe(
+                        temp_path,
+                        language='es',
+                        fp16=False,
+                        verbose=False,  # Desactivar progreso de Whisper
+                        temperature=0.0,
+                        best_of=1,
+                        beam_size=1,
+                        patience=1.0,
+                        suppress_tokens=[-1],
+                        without_timestamps=False,  # Cambiar a False para obtener segmentos
+                        condition_on_previous_text=True,  # Activar para mejor contexto
+                        no_speech_threshold=0.6,  # Añadir detección de silencio
+                        compression_ratio_threshold=2.4,  # Más permisivo
+                        initial_prompt=initial_prompt  # Añadir prompt inicial
+                    )
+                    
+                    transcript = self._format_transcript(result)
+                    if transcript:
+                        logger.success("Transcripción en modo seguro exitosa", file_info=audio_path)
+                        return transcript
+                    else:
+                        logger.warning("⚠️ Transcripción no produjo texto")
+                        return None
+                    
+                except RuntimeError as rt_error:
+                    error_msg = str(rt_error).lower()
+                    if any(word in error_msg for word in ["reshape", "tensor", "0 elements"]):
+                        logger.warning(f"⚠️ Error de tensor/reshape detectado: {rt_error}")
+                        logger.info("🔄 Intentando procesar por segmentos...")
+                        # Si falla, intentar con segmentos más pequeños
+                        return self._transcribe_by_segments(temp_path, audio_path)
+                    else:
+                        raise
                 
             except RuntimeError as e:
-                if "tensor" in str(e).lower():
-                    logger.warning(f"Error de tensor, intentando con segmentos: {e}")
-                    # Si falla, intentar con segmentos más pequeños
+                # Captura adicional por si acaso
+                error_msg = str(e).lower()
+                if any(word in error_msg for word in ["tensor", "reshape", "0 elements"]):
+                    logger.warning(f"Error de procesamiento, intentando con segmentos: {e}")
                     return self._transcribe_by_segments(temp_path, audio_path)
                 else:
                     raise
@@ -1013,6 +1154,24 @@ class AudioProcessor:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
     
+    def _validate_audio_segment(self, segment: AudioSegment, min_duration_ms: int = 100) -> bool:
+        """Validar que un segmento de audio tenga contenido válido"""
+        try:
+            # Verificar duración mínima
+            if len(segment) < min_duration_ms:
+                return False
+            
+            # Verificar que tiene contenido de audio (no silencio completo)
+            # Obtener el nivel de dBFS promedio
+            if hasattr(segment, 'dBFS'):
+                # Si el audio es extremadamente silencioso (menos de -60 dB), podría estar vacío
+                if segment.dBFS < -60:
+                    return False
+            
+            return True
+        except Exception:
+            return False
+
     def _transcribe_by_segments(self, audio_file_path: str, original_path: str) -> Optional[str]:
         """Transcribir audio dividiéndolo en segmentos más pequeños"""
         file_basename = os.path.basename(original_path)
@@ -1024,6 +1183,11 @@ class AudioProcessor:
         try:
             # Cargar audio con pydub
             audio = AudioSegment.from_wav(audio_file_path)
+            
+            # Verificar que el audio tiene contenido
+            if len(audio) == 0:
+                logger.error("El archivo de audio está vacío")
+                return None
             
             # Dividir en segmentos de 30 segundos
             segment_length_ms = 30 * 1000  # 30 segundos
@@ -1040,29 +1204,61 @@ class AudioProcessor:
             for i, segment in enumerate(segments):
                 logger.info(f"\n🎯 Procesando segmento {i+1}/{len(segments)} de {file_basename}")
                 
+                # Validar segmento antes de procesar
+                if not self._validate_audio_segment(segment):
+                    logger.warning(f"⚠️ Segmento {i+1} es demasiado corto o está vacío, saltando...")
+                    continue
+                
                 with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_seg:
                     segment.export(temp_seg.name, format="wav")
                     
                     try:
-                        # Transcribir segmento con parámetros mínimos
-                        result = self.model.transcribe(
-                            temp_seg.name,
-                            language='es',
-                            fp16=False,
-                            verbose=False,  # Sin progreso detallado
-                            temperature=0.0
-                        )
+                        # Verificar que el archivo exportado existe y tiene contenido
+                        if not os.path.exists(temp_seg.name) or os.path.getsize(temp_seg.name) == 0:
+                            logger.warning(f"⚠️ Archivo temporal del segmento {i+1} está vacío")
+                            continue
                         
-                        text = result.get('text', '').strip()
-                        if text:
-                            transcripts.append(text)
-                            logger.debug(f"Segmento {i+1}/{len(segments)} transcrito: {len(text)} caracteres")
+                        # Transcribir segmento con manejo mejorado de errores
+                        try:
+                            # Prompt para cada segmento
+                            segment_prompt = (
+                                "Continuación de la conversación telefónica con puntuación completa."
+                            )
+                            
+                            result = self.model.transcribe(
+                                temp_seg.name,
+                                language='es',
+                                fp16=False,
+                                verbose=False,  # Sin progreso detallado
+                                temperature=0.0,
+                                no_speech_threshold=0.6,  # Aumentar umbral para detectar silencio
+                                compression_ratio_threshold=2.4,  # Ajustar umbral de compresión
+                                initial_prompt=segment_prompt,
+                                condition_on_previous_text=False  # False para segmentos independientes
+                            )
+                            
+                            text = result.get('text', '').strip()
+                            if text:
+                                transcripts.append(text)
+                                logger.debug(f"✅ Segmento {i+1}/{len(segments)} transcrito: {len(text)} caracteres")
+                            else:
+                                logger.debug(f"⚡ Segmento {i+1} no produjo texto (probablemente silencio)")
+                        
+                        except RuntimeError as rt_error:
+                            error_msg = str(rt_error).lower()
+                            if "reshape" in error_msg or "tensor" in error_msg:
+                                logger.warning(f"⚠️ Segmento {i+1} tiene problemas de formato de audio: {rt_error}")
+                                # Intentar con un procesamiento más conservador
+                                continue
+                            else:
+                                raise
                     
                     except Exception as seg_error:
-                        logger.warning(f"Error en segmento {i+1}: {seg_error}")
+                        logger.warning(f"🎵 Error en segmento {i+1}: {seg_error}")
                     
                     finally:
-                        os.unlink(temp_seg.name)
+                        if os.path.exists(temp_seg.name):
+                            os.unlink(temp_seg.name)
             
             # Unir todas las transcripciones
             if transcripts:
