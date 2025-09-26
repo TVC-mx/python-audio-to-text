@@ -30,7 +30,6 @@ textos/
 # Archivos de transcripción temporales
 *.txt
 !README.txt
-!requirements.txt
 
 # ===========================================
 # LOGS Y ARCHIVOS DE PROCESAMIENTO
