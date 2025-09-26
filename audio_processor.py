@@ -817,28 +817,34 @@ class AudioProcessor:
                 logger.warning(f"Conversión en modo seguro falló: {result.stderr}")
                 return None
             
-            # Cargar el audio con numpy para asegurar formato correcto
-            import wave
-            import numpy as np
-            
-            with wave.open(temp_path, 'rb') as wav_file:
-                frames = wav_file.readframes(-1)
-                audio_data = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-            
-            # Transcribir con el audio en formato numpy
-            result = self.model.transcribe(
-                audio_data,
-                language='es',
-                fp16=False,
-                verbose=False,
-                temperature=0.0,
-                best_of=1,
-                beam_size=1
-            )
-            
-            transcript = self._format_transcript(result)
-            logger.success("Transcripción en modo seguro exitosa", file_info=audio_path)
-            return transcript
+            # Intentar transcripción con archivo convertido primero
+            try:
+                # Intentar transcripción directa del archivo
+                result = self.model.transcribe(
+                    temp_path,
+                    language='es',
+                    fp16=False,
+                    verbose=False,
+                    temperature=0.0,
+                    best_of=1,
+                    beam_size=1,
+                    patience=1.0,
+                    suppress_tokens=[-1],
+                    without_timestamps=True,
+                    condition_on_previous_text=False
+                )
+                
+                transcript = self._format_transcript(result)
+                logger.success("Transcripción en modo seguro exitosa", file_info=audio_path)
+                return transcript
+                
+            except RuntimeError as e:
+                if "tensor" in str(e).lower():
+                    logger.warning(f"Error de tensor, intentando con segmentos: {e}")
+                    # Si falla, intentar con segmentos más pequeños
+                    return self._transcribe_by_segments(temp_path, audio_path)
+                else:
+                    raise
             
         except Exception as e:
             logger.error(f"Error en modo seguro: {e}", file_info=audio_path)
@@ -846,6 +852,64 @@ class AudioProcessor:
         finally:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
+    
+    def _transcribe_by_segments(self, audio_file_path: str, original_path: str) -> Optional[str]:
+        """Transcribir audio dividiéndolo en segmentos más pequeños"""
+        logger.info("🔄 Transcribiendo por segmentos", file_info=original_path)
+        
+        try:
+            # Cargar audio con pydub
+            audio = AudioSegment.from_wav(audio_file_path)
+            
+            # Dividir en segmentos de 30 segundos
+            segment_length_ms = 30 * 1000  # 30 segundos
+            segments = []
+            
+            for i in range(0, len(audio), segment_length_ms):
+                segment = audio[i:i + segment_length_ms]
+                segments.append(segment)
+            
+            logger.info(f"Audio dividido en {len(segments)} segmentos")
+            
+            # Transcribir cada segmento
+            transcripts = []
+            for i, segment in enumerate(segments):
+                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_seg:
+                    segment.export(temp_seg.name, format="wav")
+                    
+                    try:
+                        # Transcribir segmento con parámetros mínimos
+                        result = self.model.transcribe(
+                            temp_seg.name,
+                            language='es',
+                            fp16=False,
+                            verbose=False,
+                            temperature=0.0
+                        )
+                        
+                        text = result.get('text', '').strip()
+                        if text:
+                            transcripts.append(text)
+                            logger.debug(f"Segmento {i+1}/{len(segments)} transcrito: {len(text)} caracteres")
+                    
+                    except Exception as seg_error:
+                        logger.warning(f"Error en segmento {i+1}: {seg_error}")
+                    
+                    finally:
+                        os.unlink(temp_seg.name)
+            
+            # Unir todas las transcripciones
+            if transcripts:
+                full_transcript = ' '.join(transcripts)
+                logger.success(f"Transcripción por segmentos completada: {len(full_transcript)} caracteres")
+                return full_transcript
+            else:
+                logger.error("No se pudo transcribir ningún segmento")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error transcribiendo por segmentos: {e}")
+            return None
     
     def _transcribe_with_pydub(self, audio_path: str) -> Optional[str]:
         """Transcripción usando pydub para procesamiento de audio"""
