@@ -441,6 +441,9 @@ class AudioProcessor:
             # Obtener el texto completo
             full_text = result["text"].strip()
             
+            # Aplicar formato básico al texto
+            formatted_text = self._apply_basic_formatting(full_text)
+            
             # Si hay segmentos disponibles, usarlos para mejor formato
             if "segments" in result and result["segments"]:
                 formatted_lines = []
@@ -469,12 +472,63 @@ class AudioProcessor:
                 return "\n".join(formatted_lines)
             else:
                 # Si no hay segmentos, formatear el texto completo
-                return self._format_simple_text(full_text)
+                return self._format_simple_text(formatted_text)
                 
         except Exception as e:
             logger.error(f"Error formateando transcripción: {e}")
             # Fallback al texto simple
             return result.get("text", "").strip()
+    
+    def _apply_basic_formatting(self, text: str) -> str:
+        """
+        Aplica formato básico al texto: puntuación, mayúsculas, etc.
+        
+        Args:
+            text: Texto sin formato
+        
+        Returns:
+            Texto con formato básico
+        """
+        import re
+        
+        # Limpiar espacios múltiples
+        text = re.sub(r'\s+', ' ', text).strip()
+        
+        # Asegurar que empiece con mayúscula
+        if text:
+            text = text[0].upper() + text[1:]
+        
+        # Corregir puntuación básica
+        # Agregar puntos después de pausas largas (aproximación)
+        text = re.sub(r'(\w)\s+([A-Z])', r'\1. \2', text)
+        
+        # Corregir espacios alrededor de puntuación
+        text = re.sub(r'\s+([.,!?;:])', r'\1', text)
+        text = re.sub(r'([.,!?;:])\s*', r'\1 ', text)
+        
+        # Asegurar mayúsculas después de puntos
+        sentences = text.split('. ')
+        formatted_sentences = []
+        for sentence in sentences:
+            if sentence:
+                sentence = sentence.strip()
+                if sentence and not sentence[0].isupper():
+                    sentence = sentence[0].upper() + sentence[1:]
+                formatted_sentences.append(sentence)
+        
+        text = '. '.join(formatted_sentences)
+        
+        # Asegurar que termina con punto
+        if text and not text.endswith(('.', '!', '?')):
+            text += '.'
+        
+        # Corregir dobles espacios
+        text = re.sub(r'\s+', ' ', text)
+        
+        # Arreglar puntuación duplicada
+        text = re.sub(r'([.,!?;:])+', r'\1', text)
+        
+        return text.strip()
     
     def _format_time(self, seconds: float) -> str:
         """
@@ -507,26 +561,24 @@ class AudioProcessor:
         formatted_lines.append("=" * 60)
         formatted_lines.append("")
         
-        # Dividir el texto en párrafos más pequeños para mejor legibilidad
-        # Buscar puntos, comas y pausas naturales
+        # Dividir el texto en oraciones para mejor formato
         import re
         
-        # Dividir por puntos, comas y pausas largas
-        segments = re.split(r'[.,]\s+', text)
+        # Dividir por puntos finales de oración
+        sentences = re.split(r'(?<=[.!?])\s+', text)
         
         current_paragraph = []
         char_count = 0
         
-        for segment in segments:
-            if segment.strip():
-                current_paragraph.append(segment.strip())
-                char_count += len(segment)
+        for sentence in sentences:
+            if sentence.strip():
+                current_paragraph.append(sentence.strip())
+                char_count += len(sentence)
                 
                 # Crear párrafo cada 200 caracteres aproximadamente
                 if char_count > 200:
-                    paragraph_text = '. '.join(current_paragraph)
-                    if not paragraph_text.endswith('.'):
-                        paragraph_text += '.'
+                    # Las oraciones ya tienen su puntuación
+                    paragraph_text = ' '.join(current_paragraph)
                     
                     formatted_lines.append(paragraph_text)
                     formatted_lines.append("")  # Línea en blanco
@@ -536,9 +588,7 @@ class AudioProcessor:
         
         # Agregar el último párrafo si queda algo
         if current_paragraph:
-            paragraph_text = '. '.join(current_paragraph)
-            if not paragraph_text.endswith('.'):
-                paragraph_text += '.'
+            paragraph_text = ' '.join(current_paragraph)
             formatted_lines.append(paragraph_text)
             formatted_lines.append("")
         
