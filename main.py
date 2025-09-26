@@ -70,6 +70,18 @@ def parse_arguments():
         help='Solo mostrar qué se procesaría sin ejecutar'
     )
     
+    parser.add_argument(
+        '--cleanup-audio',
+        action='store_true',
+        help='Eliminar archivos de audio después de procesar'
+    )
+    
+    parser.add_argument(
+        '--keep-audio',
+        action='store_true',
+        help='Mantener archivos de audio (comportamiento por defecto)'
+    )
+    
     return parser.parse_args()
 
 def validate_date(date_string: str) -> date:
@@ -143,6 +155,15 @@ def main():
         try:
             audio_processor = AudioProcessorClient()
             logger.info("✅ Cliente de audio inicializado exitosamente")
+            
+            # Manejar opciones de limpieza de audio
+            if args.cleanup_audio:
+                audio_processor.config.CLEANUP_AUDIO_FILES = True
+                logger.info("🗑️ Configurado para eliminar archivos de audio después de procesar")
+            elif args.keep_audio:
+                audio_processor.config.CLEANUP_AUDIO_FILES = False
+                logger.info("💾 Configurado para mantener archivos de audio (comportamiento por defecto)")
+            
         except Exception as e:
             logger.error(f"❌ Error inicializando procesador de audio: {e}")
             logger.error(f"🔧 Tipo de error: {type(e).__name__}")

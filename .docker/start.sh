@@ -30,6 +30,8 @@ show_help() {
     echo "Ejemplos:"
     echo "  $0 start                                    # Iniciar servicios"
     echo "  $0 run --start-date 2024-01-01 --end-date 2024-01-02"
+    echo "  $0 run --start-date 2024-01-01 --end-date 2024-01-02 --cleanup-audio"
+    echo "  $0 run --start-date 2024-01-01 --end-date 2024-01-02 --keep-audio"
     echo "  $0 logs whisper                            # Logs del servicio Whisper"
     echo "  $0 shell python                            # Shell de la app Python"
 }

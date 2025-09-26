@@ -42,9 +42,9 @@ class Config:
     MAX_MEMORY_USAGE = os.getenv('MAX_MEMORY_USAGE', '8G')  # Límite de memoria
     CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', 5))  # Procesar en chunks de N llamadas
     
-    # Configuración de limpieza automática (por defecto: limpiar todo)
+    # Configuración de limpieza automática (por defecto: mantener archivos de audio)
     AUTO_CLEANUP = os.getenv('AUTO_CLEANUP', 'true').lower() == 'true'  # Limpiar archivos automáticamente
-    CLEANUP_AUDIO_FILES = os.getenv('CLEANUP_AUDIO_FILES', 'true').lower() == 'true'  # Limpiar archivos de audio
+    CLEANUP_AUDIO_FILES = os.getenv('CLEANUP_AUDIO_FILES', 'false').lower() == 'true'  # Limpiar archivos de audio (por defecto: NO)
     CLEANUP_TEMP_FILES = os.getenv('CLEANUP_TEMP_FILES', 'true').lower() == 'true'  # Limpiar archivos temporales
     KEEP_TRANSCRIPTS = os.getenv('KEEP_TRANSCRIPTS', 'true').lower() == 'true'  # Mantener transcripciones
     CLEANUP_DELAY = int(os.getenv('CLEANUP_DELAY', '0'))  # Delay en segundos antes de limpiar

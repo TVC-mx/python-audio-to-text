@@ -95,6 +95,11 @@ WHISPER_MODEL=large  # tiny, base, small, medium, large
 # Procesamiento
 MAX_CPU_WORKERS=4
 ENABLE_PARALLEL_TRANSCRIPTIONS=true
+
+# Limpieza (por defecto: mantener archivos de audio)
+AUTO_CLEANUP=true
+CLEANUP_AUDIO_FILES=false  # NO eliminar archivos de audio por defecto
+KEEP_TRANSCRIPTS=true
 ```
 
 ## 📊 Servicios
@@ -141,6 +146,18 @@ curl http://localhost:8000/health
 ```bash
 ./start.sh clean
 ./start.sh start
+```
+
+### Gestión de archivos de audio
+```bash
+# Por defecto: NO se eliminan archivos de audio (se mantienen)
+./start.sh run 2025-01-01 2025-01-31
+
+# Si quieres eliminar archivos de audio después de procesar
+./start.sh run 2025-01-01 2025-01-31 --cleanup-audio
+
+# Si quieres mantener archivos de audio (comportamiento por defecto)
+./start.sh run 2025-01-01 2025-01-31 --keep-audio
 ```
 
 ## 📈 Escalabilidad
