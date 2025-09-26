@@ -671,7 +671,8 @@ class AudioProcessor:
             ("conversión_básica", self._transcribe_with_basic_conversion),
             ("pydub", self._transcribe_with_pydub),
             ("ultra_básica", self._transcribe_ultra_basic),
-            ("directo", self._transcribe_direct)
+            ("directo", self._transcribe_direct),
+            ("modo_seguro", self._transcribe_with_safe_mode)
         ]
         
         for strategy_name, strategy_func in strategies:
@@ -716,13 +717,25 @@ class AudioProcessor:
                 # Parámetros adicionales para evitar errores de tensor
                 temperature=0.0,
                 best_of=1,
-                beam_size=1
+                beam_size=1,
+                patience=1.0,
+                suppress_tokens=[-1],
+                without_timestamps=True,
+                compression_ratio_threshold=2.4,
+                no_speech_threshold=0.6
             )
             
             transcript = self._format_transcript(result)
             logger.success("Transcripción completada", file_info=audio_path, 
                           details=f"Caracteres: {len(transcript)}")
             return transcript
+            
+        except RuntimeError as e:
+            if "tensor" in str(e).lower():
+                logger.warning(f"Error de tensor en conversión agresiva: {e}")
+                return self._transcribe_with_safe_mode(audio_path)
+            else:
+                raise
             
         finally:
             if os.path.exists(temp_path):
@@ -768,12 +781,82 @@ class AudioProcessor:
                 verbose=False,
                 temperature=0.0,
                 best_of=1,
-                beam_size=1
+                beam_size=1,
+                patience=1.0,
+                length_penalty=1.0,
+                suppress_tokens=[-1],
+                without_timestamps=True,
+                condition_on_previous_text=False,
+                compression_ratio_threshold=2.4,
+                no_speech_threshold=0.6,
+                initial_prompt=""
             )
             return self._format_transcript(result)
+        except RuntimeError as e:
+            if "tensor" in str(e).lower():
+                logger.warning(f"Error de tensor en transcripción directa: {e}")
+                # Intentar con método alternativo
+                return self._transcribe_with_safe_mode(audio_path)
+            else:
+                logger.warning(f"Transcripción directa falló: {e}")
+                return None
         except Exception as e:
             logger.warning(f"Transcripción directa falló: {e}")
             return None
+    
+    def _transcribe_with_safe_mode(self, audio_path: str) -> Optional[str]:
+        """Transcripción en modo seguro para evitar errores de tensor"""
+        logger.info("🔄 Intentando transcripción en modo seguro", file_info=audio_path)
+        
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+            temp_path = temp_file.name
+        
+        try:
+            # Conversión extra segura con resampling y normalización
+            cmd = [
+                'ffmpeg', '-i', audio_path,
+                '-vn',  # Sin video
+                '-acodec', 'pcm_s16le',  # Audio PCM
+                '-ar', '16000',  # 16kHz
+                '-ac', '1',  # Mono
+                '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',  # Normalización de audio
+                '-y', temp_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            if result.returncode != 0:
+                logger.warning(f"Conversión en modo seguro falló: {result.stderr}")
+                return None
+            
+            # Cargar el audio con numpy para asegurar formato correcto
+            import wave
+            import numpy as np
+            
+            with wave.open(temp_path, 'rb') as wav_file:
+                frames = wav_file.readframes(-1)
+                audio_data = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+            
+            # Transcribir con el audio en formato numpy
+            result = self.model.transcribe(
+                audio_data,
+                language='es',
+                fp16=False,
+                verbose=False,
+                temperature=0.0,
+                best_of=1,
+                beam_size=1
+            )
+            
+            transcript = self._format_transcript(result)
+            logger.success("Transcripción en modo seguro exitosa", file_info=audio_path)
+            return transcript
+            
+        except Exception as e:
+            logger.error(f"Error en modo seguro: {e}", file_info=audio_path)
+            return None
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
     
     def _transcribe_with_pydub(self, audio_path: str) -> Optional[str]:
         """Transcripción usando pydub para procesamiento de audio"""
@@ -795,10 +878,28 @@ class AudioProcessor:
             if not os.path.exists(temp_path) or os.path.getsize(temp_path) == 0:
                 return None
             
-            # Transcribir
-            result = self.model.transcribe(temp_path, language='es', fp16=False)
+            # Transcribir con parámetros robustos
+            result = self.model.transcribe(
+                temp_path,
+                language='es',
+                fp16=False,
+                temperature=0.0,
+                best_of=1,
+                beam_size=1,
+                patience=1.0,
+                suppress_tokens=[-1],
+                without_timestamps=True,
+                condition_on_previous_text=False
+            )
             return self._format_transcript(result)
             
+        except RuntimeError as e:
+            if "tensor" in str(e).lower():
+                logger.warning(f"Error de tensor con pydub: {e}")
+                return self._transcribe_with_safe_mode(audio_path)
+            else:
+                logger.warning(f"Transcripción con pydub falló: {e}")
+                return None
         except Exception as e:
             logger.warning(f"Transcripción con pydub falló: {e}")
             return None
@@ -840,10 +941,20 @@ class AudioProcessor:
                 patience=1.0,
                 length_penalty=1.0,
                 suppress_tokens=[-1],
-                without_timestamps=True
+                without_timestamps=True,
+                condition_on_previous_text=False,
+                compression_ratio_threshold=2.4,
+                no_speech_threshold=0.6
             )
             return self._format_transcript(result)
             
+        except RuntimeError as e:
+            if "tensor" in str(e).lower():
+                logger.warning(f"Error de tensor ultra básica: {e}")
+                return self._transcribe_with_safe_mode(audio_path)
+            else:
+                logger.warning(f"Transcripción ultra básica falló: {e}")
+                return None
         except Exception as e:
             logger.warning(f"Transcripción ultra básica falló: {e}")
             return None
