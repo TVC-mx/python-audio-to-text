@@ -1,452 +1,209 @@
-# 🎵 Procesador de Audio a Texto - Sistema Unificado
+# Audio to Text - Sistema de Transcripción
 
-Sistema completo en Docker para procesar llamadas de audio desde MySQL y convertirlas a texto usando Whisper, con soporte para CPU, GPU y cache persistente.
+Sistema de transcripción de audio a texto usando Whisper con arquitectura de microservicios en Docker.
+
+## 🏗️ Arquitectura
+
+```
+┌─────────────────────┐    HTTP API    ┌─────────────────────┐
+│   Aplicación Python │ ──────────────► │  Servicio Whisper   │
+│   (Cliente)         │                │   (Docker Container) │
+└─────────────────────┘                └─────────────────────┘
+```
 
 ## 🚀 Inicio Rápido
 
+### 1. Configurar Variables de Entorno
 ```bash
-# 1. Configurar
-cp env.example .env
-# Editar .env con tu configuración MySQL
-
-# 2. Procesar audios (modo CPU por defecto)
-./script.sh process 2024-01-01 2024-01-31
-
-# 3. Procesar con GPU
-./script.sh process 2024-01-01 2024-01-31 --mode gpu --model base
-
-# 4. Procesar con cache persistente
-./script.sh process 2024-01-01 2024-01-31 --mode cache --model small
+cp .docker/env.example .docker/.env
+# Editar .docker/.env con tus valores
 ```
 
-## 🔧 Desarrollo Rápido
-
-### **Cambios en Python sin Reconstruir Imagen**
-
+### 2. Iniciar Servicios
 ```bash
-# Primera vez (construir imagen)
-docker compose build
-
-# Desarrollo normal (cambios en Python se ven inmediatamente)
-docker compose run --rm audio-to-text python main.py --start-date 2025-01-01 --end-date 2025-01-31
-
-# Editar cualquier archivo Python y ejecutar inmediatamente
-# NO necesitas reconstruir la imagen
+cd .docker
+./start.sh start
 ```
 
-### **Cuándo Reconstruir la Imagen**
-
-- ✅ **NO necesitas reconstruir** para cambios en:
-  - `main.py`, `audio_processor.py`, `database.py`, `config.py`
-  - Cualquier archivo `.py`
-  - Archivos de configuración
-
-- ⚠️ **SÍ necesitas reconstruir** para cambios en:
-  - `requirements.txt`
-  - `Dockerfile`
-  - Dependencias del sistema
-
+### 3. Ejecutar Transcripción
 ```bash
-# Solo cuando cambies requirements.txt o Dockerfile
-docker compose build
+./start.sh run --start-date 2024-01-01 --end-date 2024-01-02
 ```
-
-## ✨ Características Principales
-
-- ✅ **Sistema Unificado**: Un solo script para todas las opciones
-- ✅ **Múltiples Modos**: CPU, GPU y Cache persistente
-- ✅ **Desarrollo Rápido**: Cambios en Python sin reconstruir imagen
-- ✅ **Procesamiento Paralelo**: Workers configurables
-- ✅ **Limpieza Automática**: Optimización de espacio en disco
-- ✅ **Transcripción Avanzada**: Whisper con múltiples modelos
-- ✅ **Logging Estructurado**: Logs con colores y emojis
-- ✅ **Monitoreo Integrado**: Estado, logs y uso de disco
-- ✅ **Configuración Flexible**: Variables de entorno granulares
 
 ## 📁 Estructura del Proyecto
 
 ```
 python-audio-to-text/
-├── script.sh              # Script unificado principal
-├── docker-compose.yml     # Docker Compose optimizado para desarrollo
-├── env.example           # Configuración unificada
-├── audio_processor.py    # Procesamiento de audio y transcripción
-├── database.py           # Gestión de conexión MySQL
-├── main.py              # Script principal
-├── config.py            # Configuración centralizada
-├── requirements.txt     # Dependencias de Python
-├── Dockerfile          # Imagen Docker estándar
-├── Dockerfile.gpu      # Imagen Docker para GPU
-├── UNIFIED_GUIDE.md    # Guía completa del sistema
-└── README.md          # Este archivo
+├── .docker/                    # Configuración Docker
+│   ├── docker-compose.yml     # Orquestación de servicios
+│   ├── Dockerfile.python      # Imagen de la app Python
+│   ├── Dockerfile.whisper     # Imagen del servicio Whisper
+│   ├── start.sh               # Script unificado de gestión
+│   └── README.md              # Documentación Docker
+├── audio_processor_client.py  # Cliente para el servicio Whisper
+├── main.py                    # Aplicación principal
+├── config.py                  # Configuración
+└── requirements.txt           # Dependencias Python
 ```
 
-## 🎯 Modos de Procesamiento
+## 🛠️ Comandos Disponibles
 
-### **1. Modo CPU (Por defecto)**
+### Gestión de Servicios
 ```bash
-# Usando script.sh
-./script.sh process 2024-01-01 2024-01-31 --mode cpu --workers 4 --model tiny
+cd .docker
 
-# Usando Docker Compose directo
-docker compose run --rm audio-to-text python main.py --start-date 2024-01-01 --end-date 2024-01-31
-```
-- **Optimizado para**: Sistemas sin GPU
-- **Características**: Procesamiento paralelo en CPU
-- **Recomendado para**: Sistemas básicos a medios
-
-### **2. Modo GPU**
-```bash
-# Usando script.sh
-./script.sh process 2024-01-01 2024-01-31 --mode gpu --model base
-
-# Usando Docker Compose directo
-docker compose run --rm audio-to-text-gpu python main.py --start-date 2024-01-01 --end-date 2024-01-31
-```
-- **Optimizado para**: Sistemas con GPU NVIDIA
-- **Características**: Aceleración por GPU
-- **Recomendado para**: Sistemas potentes con GPU
-
-### **3. Modo Cache**
-```bash
-# Usando script.sh
-./script.sh process 2024-01-01 2024-01-31 --mode cache --model small
-
-# Usando Docker Compose directo
-docker compose run --rm whisper-cache python main.py --start-date 2024-01-01 --end-date 2024-01-31
-```
-- **Optimizado para**: Procesamiento masivo
-- **Características**: Modelo persistente en memoria
-- **Recomendado para**: Procesamiento de grandes volúmenes
-
-## 🐳 Comandos Docker Compose Directos
-
-### **Comandos Básicos:**
-```bash
-# Construir imagen
-docker compose build
-
-# Ejecutar procesamiento (CPU)
-docker compose run --rm audio-to-text python main.py --start-date 2025-01-01 --end-date 2025-01-31
-
-# Ejecutar procesamiento (GPU)
-docker compose run --rm audio-to-text-gpu python main.py --start-date 2025-01-01 --end-date 2025-01-31
-
-# Ejecutar procesamiento (Cache)
-docker compose run --rm whisper-cache python main.py --start-date 2025-01-01 --end-date 2025-01-31
+./start.sh start              # Iniciar todos los servicios
+./start.sh stop               # Detener todos los servicios
+./start.sh restart            # Reiniciar servicios
+./start.sh status             # Ver estado de servicios
+./start.sh health             # Verificar salud de servicios
 ```
 
-### **Comandos de Desarrollo:**
+### Logs y Debugging
 ```bash
-# Ver logs en tiempo real
-docker compose logs -f audio-to-text
-
-# Ejecutar shell interactivo
-docker compose run --rm audio-to-text bash
-
-# Ver estado de contenedores
-docker compose ps
-
-# Detener todos los servicios
-docker compose down
+./start.sh logs               # Logs de todos los servicios
+./start.sh logs whisper       # Logs del servicio Whisper
+./start.sh logs python        # Logs de la aplicación Python
+./start.sh shell python       # Acceder al shell de Python
+./start.sh shell whisper      # Acceder al shell de Whisper
 ```
 
-## 🧹 Limpieza Automática
-
-### **Opciones de Limpieza:**
+### Desarrollo
 ```bash
-# Limpieza automática (por defecto)
-./script.sh process 2024-01-01 2024-01-31 --cleanup
-
-# Deshabilitar limpieza
-./script.sh process 2024-01-01 2024-01-31 --no-cleanup
-
-# Mantener archivos de audio
-./script.sh process 2024-01-01 2024-01-31 --keep-audio
-
-# Limpiar también transcripciones
-./script.sh process 2024-01-01 2024-01-31 --clean-transcripts
+./start.sh build              # Reconstruir todas las imágenes
+./start.sh clean              # Limpiar volúmenes y contenedores
+./start.sh run [args...]      # Ejecutar app Python con argumentos
 ```
 
-## 📊 Monitoreo y Gestión
+## 🔧 Configuración
 
-### **Comandos de Gestión:**
+### Variables de Entorno (.docker/.env)
 ```bash
-# Ver estado de servicios
-./script.sh status
-
-# Detener todos los servicios
-./script.sh stop
-
-# Ver logs en tiempo real
-./script.sh logs
-
-# Verificar uso de disco
-./script.sh disk-usage
-```
-
-## ⚙️ Configuración
-
-### **Configuración Inicial:**
-```bash
-# Copiar configuración unificada
-cp env.example .env
-
-# Editar configuración
-nano .env
-```
-
-### **Variables de Entorno Principales:**
-```bash
-# Base de datos
+# MySQL
 MYSQL_HOST=localhost
+MYSQL_PORT=3306
 MYSQL_USER=root
-MYSQL_PASSWORD=tu_password
+MYSQL_PASSWORD=your_password
 MYSQL_DATABASE=llamadas
 
+# Audio
+AUDIO_BASE_URL=https://your-audio-server.com
+
 # Whisper
-WHISPER_MODEL=tiny
+WHISPER_MODEL=large  # tiny, base, small, medium, large
 
 # Procesamiento
 MAX_CPU_WORKERS=4
-CHUNK_SIZE=5
-
-# Limpieza automática
-AUTO_CLEANUP=true
-CLEANUP_AUDIO_FILES=true
-KEEP_TRANSCRIPTS=true
+ENABLE_PARALLEL_TRANSCRIPTIONS=true
 ```
 
-## 🚀 Ejemplos de Uso
+## 📊 Servicios
 
-### **Configuración Básica:**
+### Servicio de Whisper
+- **Puerto**: 8000
+- **URL**: http://localhost:8000
+- **Health**: http://localhost:8000/health
+- **Función**: Transcripción de audio con modelo persistente
+
+### Aplicación Python
+- **Función**: Cliente que se conecta al servicio de Whisper
+- **Comunicación**: HTTP REST API
+- **Dependencias**: Requiere servicio de Whisper saludable
+
+## 🎯 Ventajas de esta Arquitectura
+
+- ✅ **Modelo Persistente**: No se re-descarga al cambiar código
+- ✅ **Servicios Independientes**: Whisper y Python separados
+- ✅ **Escalabilidad**: Múltiples clientes, un solo modelo
+- ✅ **Desarrollo Ágil**: Cambios de código sin tocar el modelo
+- ✅ **Gestión Simplificada**: Un solo script para todo
+
+## 🔍 Troubleshooting
+
+### El servicio de Whisper no inicia
 ```bash
-# Procesamiento simple
-./script.sh process 2024-01-01 2024-01-31
-
-# Con limpieza automática
-./script.sh process 2024-01-01 2024-01-31 --cleanup
+./start.sh logs whisper
+./start.sh health
 ```
 
-### **Configuración Avanzada:**
+### La aplicación Python no se conecta
 ```bash
-# GPU con modelo grande
-./script.sh process 2024-01-01 2024-01-31 --mode gpu --model large
-
-# Cache con limpieza agresiva
-./script.sh process 2024-01-01 2024-01-31 --mode cache --clean-transcripts
-
-# CPU optimizado para sistemas potentes
-./script.sh process 2024-01-01 2024-01-31 --mode cpu --workers 8 --chunk-size 10
+./start.sh logs python
+curl http://localhost:8000/health
 ```
 
-### **Configuración de Producción:**
+### Problemas de memoria
+- Cambiar `WHISPER_MODEL=medium` en docker-compose.yml
+- Reducir `MAX_CPU_WORKERS`
+- Aumentar memoria del contenedor
+
+### Limpiar todo y empezar de nuevo
 ```bash
-# Iniciar servicios persistentes
-./script.sh start 2024-01-01 2024-01-31 --mode cache --model base
-
-# Monitorear progreso
-./script.sh logs
-
-# Verificar uso de disco
-./script.sh disk-usage
-
-# Detener servicios
-./script.sh stop
+./start.sh clean
+./start.sh start
 ```
 
-## 📚 Comandos de Referencia
+## 📈 Escalabilidad
 
-### **Comandos Principales:**
+### Múltiples instancias de Python
+```yaml
+# En docker-compose.yml
+services:
+  python-app-1:
+    # ... configuración
+  python-app-2:
+    # ... configuración
+```
+
+### Cambiar modelo de Whisper
+1. Editar `WHISPER_MODEL` en docker-compose.yml
+2. `./start.sh clean` (elimina modelo anterior)
+3. `./start.sh start` (descarga nuevo modelo)
+
+## 🚀 Desarrollo
+
+### Modificar código Python
+- Los cambios se reflejan automáticamente
+- No necesitas reconstruir el servicio de Whisper
+
+### Modificar servicio de Whisper
 ```bash
-./script.sh process [fecha_inicio] [fecha_fin] [opciones]
-./script.sh start [fecha_inicio] [fecha_fin] [opciones]
-./script.sh stop
-./script.sh status
-./script.sh logs
-./script.sh disk-usage
-./script.sh help
+./start.sh build
+./start.sh restart
 ```
 
-### **Opciones de Procesamiento:**
+### Ver logs en tiempo real
 ```bash
---mode cpu|gpu|cache
---workers N
---chunk-size N
---model tiny|base|small|medium|large
+./start.sh logs
 ```
 
-### **Opciones de Limpieza:**
+## 📋 Ejemplos de Uso
+
+### Procesar un rango de fechas
 ```bash
---cleanup
---no-cleanup
---keep-audio
---clean-transcripts
---cleanup-delay N
+./start.sh run --start-date 2024-01-01 --end-date 2024-01-31
 ```
 
-### **Opciones de Salida:**
+### Modo dry-run
 ```bash
---dry-run
---json
---query "SQL"
---build
---logs
+./start.sh run --start-date 2024-01-01 --end-date 2024-01-02 --dry-run
 ```
 
-## 🛠️ Solución de Problemas
-
-### **Problemas Comunes:**
-
-#### **1. Error de Docker:**
+### Con query personalizada
 ```bash
-# Verificar Docker
-docker --version
-docker compose --version
-
-# Reiniciar servicios
-./script.sh stop
-./script.sh start 2024-01-01 2024-01-31
+./start.sh run --start-date 2024-01-01 --end-date 2024-01-02 --query "SELECT * FROM calls WHERE user_type = 'customer'"
 ```
 
-#### **2. Error de GPU:**
-```bash
-# Verificar GPU
-nvidia-smi
+## 🔗 URLs Importantes
 
-# Usar modo CPU
-./script.sh process 2024-01-01 2024-01-31 --mode cpu
-```
+- **Servicio Whisper**: http://localhost:8000
+- **Health Check**: http://localhost:8000/health
+- **API Docs**: http://localhost:8000/docs (si está habilitado)
 
-#### **3. Error de Memoria:**
-```bash
-# Reducir workers
-./script.sh process 2024-01-01 2024-01-31 --workers 2
+## 📞 Soporte
 
-# Reducir chunk size
-./script.sh process 2024-01-01 2024-01-31 --chunk-size 3
-```
-
-#### **4. Error de Disco:**
-```bash
-# Verificar uso de disco
-./script.sh disk-usage
-
-# Habilitar limpieza automática
-./script.sh process 2024-01-01 2024-01-31 --cleanup
-```
-
-#### **5. Problemas de Desarrollo:**
-```bash
-# Cambios en Python no se ven
-# Verificar que el volumen esté montado
-docker compose run --rm audio-to-text ls -la /app
-
-# Reconstruir solo si cambias requirements.txt
-docker compose build
-
-# Ver logs detallados
-docker compose run --rm audio-to-text python main.py --start-date 2025-01-01 --end-date 2025-01-31 --dry-run
-```
-
-#### **6. Problemas de Docker Compose:**
-```bash
-# Limpiar contenedores
-docker compose down
-docker system prune -f
-
-# Reconstruir desde cero
-docker compose build --no-cache
-docker compose up
-```
-
-## 📈 Rendimiento Esperado
-
-### **Procesamiento Paralelo:**
-| Método | 10 Llamadas | 50 Llamadas | 100 Llamadas |
-|--------|-------------|-------------|--------------|
-| **Secuencial** | 15 min | 75 min | 150 min |
-| **Paralelo (4 workers)** | 4 min | 20 min | 40 min |
-| **Paralelo (6 workers)** | 3 min | 15 min | 30 min |
-
-### **Modelos de Whisper:**
-| Modelo | Velocidad | Precisión | Memoria | Recomendado para |
-|--------|-----------|-----------|---------|------------------|
-| **tiny** | ⚡⚡⚡ | ⭐⭐ | 1GB | CPU básico |
-| **base** | ⚡⚡ | ⭐⭐⭐ | 2GB | CPU medio |
-| **small** | ⚡ | ⭐⭐⭐⭐ | 3GB | CPU potente |
-| **medium** | 🐌 | ⭐⭐⭐⭐⭐ | 5GB | GPU |
-| **large** | 🐌🐌 | ⭐⭐⭐⭐⭐ | 10GB | GPU potente |
-
-## 🎯 Mejores Prácticas
-
-### **1. Configuración Inicial:**
-```bash
-# Copiar configuración
-cp env.example .env
-
-# Editar configuración
-nano .env
-
-# Probar con modo CPU
-./script.sh process 2024-01-01 2024-01-31 --dry-run
-```
-
-### **2. Configuración por Sistema:**
-
-#### **Sistema Básico (2-4 cores, 4GB RAM):**
-```bash
-./script.sh process 2024-01-01 2024-01-31 --mode cpu --workers 2 --model tiny
-```
-
-#### **Sistema Medio (4-6 cores, 8GB RAM):**
-```bash
-./script.sh process 2024-01-01 2024-01-31 --mode cpu --workers 4 --model base
-```
-
-#### **Sistema Potente (8+ cores, 16GB RAM):**
-```bash
-./script.sh process 2024-01-01 2024-01-31 --mode cpu --workers 6 --model small
-```
-
-#### **Sistema con GPU:**
-```bash
-./script.sh process 2024-01-01 2024-01-31 --mode gpu --model base
-```
-
-### **3. Configuración de Producción:**
-```bash
-# Usar cache para grandes volúmenes
-./script.sh start 2024-01-01 2024-01-31 --mode cache --model base
-
-# Monitorear progreso
-./script.sh logs
-
-# Verificar uso de disco
-./script.sh disk-usage
-```
-
-## 📖 Documentación Adicional
-
-- **UNIFIED_GUIDE.md**: Guía completa del sistema unificado
-- **script.sh --help**: Ayuda del script principal
-- **env.example**: Configuración de ejemplo
-
-## 🤝 Contribuir
-
-1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
-
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia MIT. Ver el archivo `LICENSE` para más detalles.
-
-## 🆘 Soporte
-
-Para soporte y preguntas:
-- Crear un issue en GitHub
-- Revisar la documentación en `UNIFIED_GUIDE.md`
-- Usar `./script.sh help` para ver todas las opciones
+Para problemas o preguntas:
+1. Verificar logs: `./start.sh logs`
+2. Verificar salud: `./start.sh health`
+3. Revisar configuración en `.docker/.env`
+4. Consultar documentación en `.docker/README.md`

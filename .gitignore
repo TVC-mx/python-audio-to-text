@@ -211,7 +211,7 @@ cython_debug/
 # ===========================================
 # Docker volumes
 docker-data/
-.docker/
+
 
 # ===========================================
 # SISTEMA OPERATIVO

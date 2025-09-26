@@ -1,0 +1,34 @@
+FROM python:3.9-slim
+
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Crear directorio de trabajo
+WORKDIR /app
+
+# Copiar requirements
+COPY requirements.whisper.txt requirements.txt .
+
+# Instalar dependencias de Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar código del servicio
+COPY whisper_service.py .
+COPY config.whisper.py config.py .
+
+# Crear directorio para modelos
+RUN mkdir -p /app/models
+
+# Variables de entorno
+ENV WHISPER_MODEL=large
+ENV WHISPER_CACHE_DIR=/app/models
+ENV PORT=8000
+
+# Exponer puerto
+EXPOSE 8000
+
+# Comando por defecto
+CMD ["python", "whisper_service.py"]

@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # Servicio de Whisper independiente
+  whisper-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.whisper
+    container_name: whisper-transcription-service
+    ports:
+      - "8000:8000"
+    environment:
+      - WHISPER_MODEL=large
+      - WHISPER_CACHE_DIR=/app/models
+      - PORT=8000
+    volumes:
+      - whisper_models:/app/models
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - audio_processing
+
+  # Aplicación principal de Python
+  python-app:
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile.python
+    container_name: python-audio-to-text
+    depends_on:
+      whisper-service:
+        condition: service_healthy
+    environment:
+      - WHISPER_SERVICE_URL=http://whisper-service:8000
+      - MYSQL_HOST=${MYSQL_HOST}
+      - MYSQL_PORT=${MYSQL_PORT}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - AUDIO_BASE_URL=${AUDIO_BASE_URL}
+      - WHISPER_MODEL=${WHISPER_MODEL:-large}
+      - MAX_CPU_WORKERS=${MAX_CPU_WORKERS:-4}
+      - ENABLE_PARALLEL_TRANSCRIPTIONS=${ENABLE_PARALLEL_TRANSCRIPTIONS:-true}
+    volumes:
+      - ../audios:/app/audios
+      - ../textos:/app/textos
+      - ../logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - audio_processing
+
+volumes:
+  whisper_models:
+    driver: local
+
+networks:
+  audio_processing:
+    driver: bridge

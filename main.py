@@ -13,7 +13,7 @@ import json
 import os
 
 from database import DatabaseManager
-from audio_processor import AudioProcessor
+from audio_processor_client import AudioProcessorClient
 from config import Config
 
 # Configurar logging
@@ -137,12 +137,12 @@ def main():
         
         # Inicializar componentes
         db_manager = DatabaseManager()
-        logger.info("🔍 PASO 0: Inicializando procesador de audio...")
-        logger.info("⏳ Esto incluye la carga del modelo Whisper (puede tomar varios minutos)...")
+        logger.info("🔍 PASO 0: Inicializando cliente de audio...")
+        logger.info("⏳ Conectando al servicio de Whisper independiente...")
         
         try:
-            audio_processor = AudioProcessor()
-            logger.info("✅ Procesador de audio inicializado exitosamente")
+            audio_processor = AudioProcessorClient()
+            logger.info("✅ Cliente de audio inicializado exitosamente")
         except Exception as e:
             logger.error(f"❌ Error inicializando procesador de audio: {e}")
             logger.error(f"🔧 Tipo de error: {type(e).__name__}")
@@ -152,16 +152,18 @@ def main():
             sys.exit(1)
         
         # Logs detallados después de la inicialización
-        logger.info("🔍 PASO 0.1: Verificando estado del procesador...")
-        logger.info(f"📊 Estado del procesador:")
-        logger.info(f"  - Modelo cargado: {audio_processor.model is not None}")
+        logger.info("🔍 PASO 0.1: Verificando estado del servicio de Whisper...")
+        service_info = audio_processor.get_service_info()
+        logger.info(f"📊 Estado del servicio:")
+        logger.info(f"  - Servicio disponible: {service_info.get('status') == 'healthy'}")
+        logger.info(f"  - Modelo cargado: {service_info.get('model_loaded', False)}")
+        logger.info(f"  - Modelo: {service_info.get('model_name', 'unknown')}")
         logger.info(f"  - Configuración CPU: {audio_processor.config.CPU_OPTIMIZED}")
         logger.info(f"  - Workers disponibles: {audio_processor.config.MAX_CPU_WORKERS}")
-        logger.info(f"  - Chunk size: {audio_processor.config.CHUNK_SIZE}")
         
         # Log crítico para verificar que llegamos hasta aquí
-        logger.info("🔍 PASO 0.1.1: Verificando que el procesador está completamente inicializado...")
-        logger.info("✅ PASO 0.1 COMPLETADO: Procesador verificado y listo")
+        logger.info("🔍 PASO 0.1.1: Verificando que el cliente está completamente inicializado...")
+        logger.info("✅ PASO 0.1 COMPLETADO: Cliente verificado y listo")
         
         # Conectar a la base de datos
         logger.info("🔍 PASO 0.2: Conectando a la base de datos...")

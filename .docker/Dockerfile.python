@@ -1,14 +1,8 @@
 FROM python:3.11-slim
 
-# Instalar dependencias del sistema necesarias para audio
+# Instalar dependencias del sistema
 RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    libsndfile1 \
-    libsndfile1-dev \
-    libsoxr0 \
-    libsoxr-dev \
-    gcc \
-    g++ \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Crear directorio de trabajo
@@ -26,7 +20,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Crear directorios para audios y textos
-RUN mkdir -p /app/audios /app/textos
+RUN mkdir -p /app/audios /app/textos /app/logs
+
+# Variables de entorno
+ENV PYTHONPATH=/app
+ENV WHISPER_SERVICE_URL=http://whisper-service:8000
 
 # Comando por defecto
 CMD ["python", "main.py"]
